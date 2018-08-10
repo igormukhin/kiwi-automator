@@ -29,7 +29,7 @@
     const autosendToMission = {
         enabled: true,
         continent: 'icebreaker',
-        mission: 'Water',
+        mission: 'Bear',
         minEnergy: 3,
         stars: 1,
         winMoneyReward: 10,
