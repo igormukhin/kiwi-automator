@@ -16,12 +16,31 @@
 
     const waitBeforeStartMillis = 1000;
 
-    let refreshDelayMillis = 15 * 1000;
+    let refreshDelayMillis = 5 * 1000;
     const fastRefreshDelayMillis = 100;
     const slowRefreshDelayMillis = 600 * 1000;
 
+    const energyForStars = {
+      1: 3,
+      2: 7,
+      3: 10
+    };
+
+    const mission_Water = {
+        continent: 'icebreaker',
+        mission: 'Water',
+        companion: { s: 0, i: 5, d: 1, c: 4, l: 10 }
+    };
+
+    const mission_Bear = {
+        continent: 'icebreaker',
+        mission: 'Bear',
+        companion: { s: 0, i: 3, d: 1, c: 6, l: 10 }
+    };
+
     /**
      * Engi missions: pripyat/Wheel, shark/Bite, icebreaker/Water, volcano/Ararat, anubis/Oasis
+     * Medic missions: icebreaker/Bear
      *
      * NOTE: After changing the mission, remember to get the results of the previous mission manually. It will not
      * happen automatically.
@@ -30,8 +49,8 @@
         enabled: true,
         continent: 'icebreaker',
         mission: 'Bear',
-        minEnergy: 3,
-        stars: 1,
+        stars: 3,
+        starsOnLowEnergy: 1,
         winMoneyReward: 10,
         sendButtonText: 'Send',
         closeButtonText: 'Close',
@@ -61,8 +80,7 @@
 
         // start operations
         runOperations([ initEnergy, initMoney,
-            buyEnergy,
-            openMissionWindow, detectOnMission, sendToMission,
+            openMissionWindow, detectOnMission, buyEnergy, sendToMission,
             nothingToDo ]);
     }
 
@@ -120,7 +138,7 @@
                         return;
                     }
 
-                    console.log('Mission windows opened');
+                    console.log('Mission window opened');
 
                     // continue the execution chain
                     deferred.resolve();
@@ -219,10 +237,6 @@
                 }
             }, intervalDuration);
 
-            // close dialog
-            //var $closeBtn = $('section > .screen > .screen__inner > .close');
-            //$closeBtn.trigger('click');
-
         } else {
             console.log('Character is not on mission');
 
@@ -234,9 +248,16 @@
     }
 
     function sendToMission() {
-        if (autosendToMission.enabled
-            && currentEnergy >= autosendToMission.minEnergy) {
-        } else {
+        let stars = null;
+        if (autosendToMission.enabled) {
+            if (currentEnergy >= energyForStars[autosendToMission.stars]) {
+                stars = autosendToMission.stars;
+            } else if (autosendToMission.starsOnLowEnergy > 0
+                    && currentEnergy >= energyForStars[autosendToMission.starsOnLowEnergy]) {
+                stars = autosendToMission.starsOnLowEnergy;
+            }
+        }
+        if (stars === null) {
             return Promise.resolve();
         }
 
@@ -244,7 +265,7 @@
         console.log('Sending to mission...');
 
         // select stars
-        const $starsBtn = $('div.tasks__window.avatar .stars_list:nth-child(' + autosendToMission.stars + ')');
+        const $starsBtn = $('div.tasks__window.avatar .stars_list:nth-child(' + stars + ')');
         if (!$starsBtn.length) {
             console.log('cant find stars');
             deferred.reject();
@@ -262,8 +283,7 @@
             }
 
             $sendBtn.trigger('click');
-            permaLog('Sent to mission: ' + autosendToMission.continent + '/' + autosendToMission.mission + '/'
-                    + autosendToMission.stars);
+            permaLog('Sent to mission: ' + autosendToMission.continent + '/' + autosendToMission.mission + '/' + stars);
 
             // don't continue the chain
             deferred.reject();
@@ -281,14 +301,30 @@
         elem.dispatchEvent(evt);
     }
 
+    function closeMissionWindow() {
+        const deferred = $.Deferred();
+
+        // close continent dialog
+        var $closeBtn = $('section > .screen > .screen__inner > .close');
+        $closeBtn.trigger('click');
+
+        setTimeout(() => {
+            deferred.resolve();
+        }, 200);
+
+        return deferred.promise();
+    }
+
     function buyEnergy() {
         if (autobuyEnergy.enabled
             && currentEnergy < autobuyEnergy.buyIfEnergyLessThen
             && currentMoney > autobuyEnergy.buyIfMoneyMoreThen) {
             const deferred = $.Deferred();
-            console.log('Buying energy...');
+            console.info('Buying energy...');
 
-            setTimeout(() => {
+            closeMissionWindow().done(() => {
+                console.info('Buying energy after mission dialogs are closed...');
+
                 // click plus button
                 const $sendBtn = $('header.header .energy .button--plus');
                 if (!$sendBtn.length) {
@@ -310,7 +346,7 @@
                     simulateClick($buyBtn[0], 'touchstart');
                     setTimeout(() => {
                         const $animStarted = $buyBtn.find('.button__animation.animation_inprogress');
-                        if (!$buyBtn.length) {
+                        if (!$animStarted.length) {
                             console.error('can\'t buy energy. Button does not react!');
                             deferred.resolve();
                             return;
@@ -322,7 +358,7 @@
                     }, 200);
 
                 }, 1000);
-            }, 10);
+            });
 
             return deferred.promise();
         } else {
@@ -406,7 +442,7 @@
      * @constructor
      */
     function ExecutionChain() {
-        var lastPromise = $.when();
+        let lastPromise = $.when();
         this.submit = function (job, onFail) {
             if (!$.isFunction(job)) {
                 throw "not a function: " + job;
@@ -425,35 +461,53 @@
     }
 
     window.ka_report = function () {
-        const report = { permanents: [], days: {},
-            summary: { netGained: 0, permanents: 0 }};
+        const report = { permanents: [], days: {}, missions: {}, tail: [],
+            summary: { money: 0, permanents: 0 }};
+        let mission = null;
+        const tailLength = 20;
 
         db.permaLog.each(log => {
             //console.log(log.time, log.msg);
             const msg = log.msg;
-            const day = log.time.toLocaleDateString("de-DE", { month: '2-digit', day: '2-digit'});
+            //const day = log.time.toLocaleDateString("de-DE", { month: '2-digit', day: '2-digit'});
+            const day = ('0' + (log.time.getMonth() + 1)).slice(-2) + '.'
+                + ('0' + log.time.getDate()).slice(-2);
 
-            if (msg.indexOf('Permanent') !== -1) {
-                report.permanents.push({ day: day, reward: msg.substring(msg.indexOf('Reward') + 8) });
-            }
-
-            report.days[day] = report.days[day] || { won: 0, lost: 0, winRate: 0, netGained: 0 };
+            report.days[day] = report.days[day] || { won: 0, lost: 0, total: 0, rate: 0, money: 0, energyBuys: 0 };
             const dayStats = report.days[day];
             if (msg.indexOf('Energy purchased') !== -1) {
-                dayStats.netGained -= autobuyEnergy.price;
+                dayStats.energyBuys++;
+                dayStats.money -= autobuyEnergy.price;
+
+            } else if (msg.indexOf('Sent to mission: ') === 0) {
+                mission = msg.substring('Sent to mission: '.length);
+
             } else if (msg.indexOf('SUCCESS') !== -1) {
                 dayStats.won++;
-                dayStats.netGained += autosendToMission.winMoneyReward;
+                dayStats.money += autosendToMission.winMoneyReward;
                 dayStatsUpdated(dayStats);
+
+                let numOfPermanents = 0;
+                let reward = msg.substring(msg.indexOf('Reward') + 8);
+                if (reward.indexOf('Permanent') !== -1) {
+                    numOfPermanents++;
+                    report.permanents.push({ day: day, reward: reward });
+                }
+
+                updateMissionStats(1, numOfPermanents);
+                updateTail(log.time, mission, 'SUCCESS', reward);
+
             } else if (msg.indexOf('FAILED') !== -1) {
                 dayStats.lost++;
                 dayStatsUpdated(dayStats);
+                updateMissionStats(0, 0);
+                updateTail(log.time, mission, 'FAILED', null);
             }
 
         }).then(() => {
             for (const day in report.days) {
                 const dayStats = report.days[day];
-                report.summary.netGained += dayStats.netGained;
+                report.summary.money += dayStats.money;
             }
             report.summary.permanents = report.permanents.length;
 
@@ -463,10 +517,35 @@
 
         function dayStatsUpdated(dayStats) {
             const fraction = dayStats.won / (dayStats.won + dayStats.lost);
-            dayStats.winRate = fraction.toLocaleString("de", {style: "percent"});
+            dayStats.rate = fraction.toLocaleString('de', {style: 'percent'});
+            dayStats.total = dayStats.won + dayStats.lost;
         }
 
-        return "Report will be printed.";
+        function updateMissionStats(won, numOfPermanents) {
+            if (mission != null) {
+                report.missions[mission] = report.missions[mission] || {won: 0, total: 0, rate: 0, permanents: 0};
+                const missionStats = report.missions[mission];
+                missionStats.won += won;
+                missionStats.total++;
+                const rate = missionStats.won / missionStats.total;
+                missionStats.rate = rate.toLocaleString('de', {style: 'percent'});
+                missionStats.permanents += numOfPermanents;
+            }
+        }
+
+        function updateTail(time, mission, result, reward) {
+            if (report.tail.length >= tailLength) {
+                report.tail.shift();
+            }
+
+            let formattedTime = time.toLocaleDateString('de-DE', { year: 'numeric', month: '2-digit', day: '2-digit' })
+                    + " " + time.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit'});
+            let text = formattedTime + ' ' + mission + ' ' + result + (reward ? ' ' + reward : '');
+
+            report.tail.push(text);
+        }
+
+        return 'Report will be printed.';
     };
 
     window.ka_deleteLogs = function (fromId, toId, msgFilter) {
