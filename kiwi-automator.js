@@ -26,35 +26,53 @@
       3: 10
     };
 
+    // engi (intellect: 5, luck: 10)
     const mission_Water = {
         continent: 'icebreaker',
         mission: 'Water',
         companion: { s: 0, i: 5, d: 1, c: 4, l: 10 }
     };
 
+    // med (charisma: 6, luck: 10)
     const mission_Bear = {
         continent: 'icebreaker',
         mission: 'Bear',
         companion: { s: 0, i: 3, d: 1, c: 6, l: 10 }
     };
 
+    // rifleman (strength: 0, luck: 10)
+    const mission_Sphinx = {
+        continent: 'anubis',
+        mission: 'Sphinx',
+        companion: { s: 0, i: 3, d: 1, c: 6, l: 10 }
+    };
+
+    // rifleman (strength: 0, luck: 10)
+    const mission_School = {
+        continent: 'pripyat',
+        mission: 'School',
+        companion: { s: 0, i: 3, d: 1, c: 6, l: 10 }
+    };
+
     /**
      * Engi missions: pripyat/Wheel, shark/Bite, icebreaker/Water, volcano/Ararat, anubis/Oasis
      * Medic missions: icebreaker/Bear
+     * Rifleman: pripyat/School, anubis/Sphinx
      *
      * NOTE: After changing the mission, remember to get the results of the previous mission manually. It will not
      * happen automatically.
      */
     const autosendToMission = {
         enabled: true,
-        continent: 'icebreaker',
-        mission: 'Bear',
-        stars: 3,
+        continent: 'pripyat',
+        mission: 'School',
+        stars: 1,
         starsOnLowEnergy: 1,
         winMoneyReward: 10,
         sendButtonText: 'Send',
         closeButtonText: 'Close',
-        characterOnMissionText: 'Character on mission'
+        characterOnMissionText: 'Character on mission',
+        gettingResultsText: 'Getting results'
     };
 
     const autobuyEnergy = {
@@ -64,12 +82,13 @@
         price: 50
     };
 
-    let currentEnergy = null;
-    let currentMoney = null;
+    let kiwiState = null;
+    let currentEnergy = () => kiwiState.user.info.cheerfulness;
+    let currentMoney = () => kiwiState.user.info.points;
     let db = null;
+    let refreshAlreadySetUp = false;
 
-    console.log('Staring KiwiAutomator...');
-    setTimeout(start, waitBeforeStartMillis);
+    start();
 
     function start() {
         // init db
@@ -79,7 +98,7 @@
         });
 
         // start operations
-        runOperations([ initEnergy, initMoney,
+        runOperations([ initialDelay, fetchState,
             openMissionWindow, detectOnMission, buyEnergy, sendToMission,
             nothingToDo ]);
     }
@@ -93,25 +112,25 @@
     }
 
     function nothingToDo() {
-        console.log('KiwiAutomator has nothing to do. May be not enough energy or money...');
+        console.info('KiwiAutomator has nothing to do. May be not enough energy or money...');
         setupSlowRefresh();
         return Promise.reject();
     }
 
     function openMissionWindow() {
-        if (!autosendToMission.enabled) {
-            return Promise.resolve();
-        }
+        //if (!autosendToMission.enabled) {
+        //    return Promise.resolve();
+        //}
 
         const deferred = $.Deferred();
-        console.log('Opening mission dialog...');
+        //console.info('Opening mission dialog...');
 
         setTimeout(function () {
             // open continent
             const pointBtn = document.querySelector('section.map .map__point.point-' + autosendToMission.continent
                 + ' .map__point__options .button');
             if (!pointBtn) {
-                console.log('cant find continent');
+                console.error('cant find continent');
                 deferred.reject();
                 return;
             }
@@ -122,7 +141,7 @@
                 const $missionBtn = $('div.tasks.' + autosendToMission.continent +
                     ' .tasks__item .avatar:has(.name span:contains(\'' + autosendToMission.mission + '\'))');
                 if (!$missionBtn.length) {
-                    console.log('cant find mission');
+                    console.error('cant find mission');
                     deferred.reject();
                     return;
                 }
@@ -132,46 +151,48 @@
                     // check mission here
                     const $title = $('div.tasks__window.avatar .tasks__info__top h4:contains(\'' + autosendToMission.mission + '\')');
                     if (!$title.length) {
-                        console.log('Failure: Mission is not correct!');
+                        console.error('Failure: Mission is not correct!');
                         setupSlowRefresh();
                         deferred.reject();
                         return;
                     }
 
-                    console.log('Mission window opened');
+                    //console.info('Mission window opened');
 
                     // continue the execution chain
                     deferred.resolve();
-                }, 1000)
-            }, 1000);
+                }, 500)
+            }, 500);
         }, 10);
 
         return deferred.promise();
     }
 
     function detectOnMission() {
-        if (!autosendToMission.enabled) {
-            return Promise.resolve();
-        }
+        //if (!autosendToMission.enabled) {
+        //    return Promise.resolve();
+        //}
 
         const deferred = $.Deferred();
-        console.log('Checking if character is on the mission...');
+        //console.info('Checking if character is on the mission...');
 
         // check wrong mission
         const $taskWindow = $('div.tasks__window.avatar');
         const $onMissionText = $taskWindow.find('.bottom'
             + ' .completed__text:contains(\'' + autosendToMission.characterOnMissionText + '\')');
         if ($onMissionText.length) {
-            console.log('Detected character is on OTHER mission! You have to finish other mission manually!');
+            console.warn('Detected character is on OTHER mission! You have to finish other mission manually!');
             setupSlowRefresh();
             return Promise.reject();
         }
 
-        // check if waiting
+        // check if on mission waiting
         const $waiting = $taskWindow.find('.prize_container.processing');
-        const $prizeCont = $taskWindow.find('.prize_container');
-        if ($waiting.length || !$prizeCont.length) {
-            console.log('Detected character on mission');
+        const $rewardCont = $taskWindow.find('.avatar__reward');
+        const $gettingResults = $taskWindow.find('.bottom'
+            + ' .completed__text:contains(\'' + autosendToMission.gettingResultsText + '\')');
+        if ($waiting.length || $rewardCont.length || $gettingResults.length) {
+            console.info('Detected character on mission');
 
             let secsLeft = null;
             const $timer = $taskWindow.find('.timer__text');
@@ -182,17 +203,17 @@
                 } else {
                     secsLeft = parseInt(timeStr);
                 }
-                //console.log('Seconds to mission end =', secsLeft);
+                //console.info('Seconds to mission end =', secsLeft);
             }
 
-            if (secsLeft >= 60) {
+            if (secsLeft != null && secsLeft >= 60) {
                 // wait until 1 minute left and then reload page
                 let waitForSecs = secsLeft - 60;
                 if (waitForSecs === 0) {
                     waitForSecs = 45;
                 }
 
-                console.log('Waiting mission end for ' + waitForSecs + ' secs.');
+                console.info('Waiting mission end for ' + waitForSecs + ' secs.');
                 setTimeout(function () {
                     setupFastRefresh();
                     deferred.reject();
@@ -200,9 +221,9 @@
                 return deferred.promise();
             }
 
-            // under minute time left or even results is here
+            // under minute time left or even results are here
             // wait for close button to come up
-            console.log('Waiting for results to come up');
+            console.info('Waiting for mission results to come up');
             let intervalTimes = 0;
             const intervalDuration = 1000;
             const intervalMaxTimes = 120;
@@ -213,13 +234,13 @@
                     const $failed = $reward.find('.failed');
                     const $success = $reward.find('.success');
                     if ($failed.length) {
-                        permaLog('Mission FAILED.');
+                        permaLog('Mission FAILED.', 'color: #7B241C; font-weight: bold;');
                     } else if ($success.length) {
                         permaLog('Mission SUCCESS. Reward: '
                             + $reward.find('.prize_item .name').text()
-                            + ' ' + $reward.find('.prize_item .time').text());
+                            + ' ' + $reward.find('.prize_item .time').text(), 'color: #196F3D; font-weight: bold;');
                     } else {
-                        permaLog('Mission result not found?!?!?!');
+                        permaLog('Error: Mission result not found');
                     }
 
                     //setupFastRefresh();
@@ -238,7 +259,7 @@
             }, intervalDuration);
 
         } else {
-            console.log('Character is not on mission');
+            console.info('Character is not on mission');
 
             // continue the execution chain
             deferred.resolve();
@@ -250,10 +271,10 @@
     function sendToMission() {
         let stars = null;
         if (autosendToMission.enabled) {
-            if (currentEnergy >= energyForStars[autosendToMission.stars]) {
+            if (currentEnergy() >= energyForStars[autosendToMission.stars]) {
                 stars = autosendToMission.stars;
             } else if (autosendToMission.starsOnLowEnergy > 0
-                    && currentEnergy >= energyForStars[autosendToMission.starsOnLowEnergy]) {
+                    && currentEnergy() >= energyForStars[autosendToMission.starsOnLowEnergy]) {
                 stars = autosendToMission.starsOnLowEnergy;
             }
         }
@@ -262,12 +283,12 @@
         }
 
         const deferred = $.Deferred();
-        console.log('Sending to mission...');
+        //console.info('Sending to mission...');
 
         // select stars
         const $starsBtn = $('div.tasks__window.avatar .stars_list:nth-child(' + stars + ')');
         if (!$starsBtn.length) {
-            console.log('cant find stars');
+            console.error('cant find stars');
             deferred.reject();
             return deferred.promise();
         }
@@ -277,7 +298,7 @@
             // sending to mission
             const $sendBtn = $('div.tasks__window.avatar .button:contains(\'' + autosendToMission.sendButtonText + '\')');
             if (!$sendBtn.length) {
-                console.log('cant find send button');
+                console.error('cant find send button');
                 deferred.reject();
                 return;
             }
@@ -301,6 +322,7 @@
         elem.dispatchEvent(evt);
     }
 
+    /*
     function closeMissionWindow() {
         const deferred = $.Deferred();
 
@@ -314,50 +336,32 @@
 
         return deferred.promise();
     }
+    */
 
     function buyEnergy() {
         if (autobuyEnergy.enabled
-            && currentEnergy < autobuyEnergy.buyIfEnergyLessThen
-            && currentMoney > autobuyEnergy.buyIfMoneyMoreThen) {
+            && currentEnergy() < autobuyEnergy.buyIfEnergyLessThen
+            && currentMoney() > autobuyEnergy.buyIfMoneyMoreThen) {
+
             const deferred = $.Deferred();
             console.info('Buying energy...');
 
-            closeMissionWindow().done(() => {
-                console.info('Buying energy after mission dialogs are closed...');
+            $.post('https://wf.my.com/minigames/bp4/user/buy-energy').done((data) => {
 
-                // click plus button
-                const $sendBtn = $('header.header .energy .button--plus');
-                if (!$sendBtn.length) {
-                    console.error('can\'t find energy plus button');
+                if (data.state === 'Success') {
+                    console.info(JSON.stringify(data));
+                    permaLog('Energy purchased');
                     deferred.reject();
-                    return;
+                } else {
+                    setupSlowRefresh();
+                    console.error('Fetched non success data', JSON.stringify(data));
+                    deferred.reject();
                 }
-                $sendBtn.trigger('click');
 
-                setTimeout(() => {
-                    // buying energy
-                    const $buyBtn = $('.purchase .buy-energy .buy-energy__purchase > .button--progress');
-                    if (!$buyBtn.length) {
-                        console.error('can\'t find purchase energy button');
-                        deferred.reject();
-                        return;
-                    }
-
-                    simulateClick($buyBtn[0], 'touchstart');
-                    setTimeout(() => {
-                        const $animStarted = $buyBtn.find('.button__animation.animation_inprogress');
-                        if (!$animStarted.length) {
-                            console.error('can\'t buy energy. Button does not react!');
-                            deferred.resolve();
-                            return;
-                        }
-
-                        permaLog('Energy purchased');
-                        deferred.reject();
-
-                    }, 200);
-
-                }, 1000);
+            }).fail(() => {
+                setupSlowRefresh();
+                console.error('Failed to buy energy');
+                deferred.reject();
             });
 
             return deferred.promise();
@@ -366,40 +370,38 @@
         }
     }
 
-    function initEnergy() {
-        currentEnergy = readCurrentEnergy();
-        if (currentEnergy == null) {
-            console.log('Can\'t read energy. Kiwi does not load? Not signed in?');
-            return false;
-        }
-        console.log('currentEnergy=', currentEnergy);
+    function initialDelay() {
+        const deferred = $.Deferred();
 
-        return Promise.resolve();
+        setTimeout(() => {
+            //console.info('Staring KiwiAutomator...');
+            deferred.resolve();
+        }, waitBeforeStartMillis);
+
+        return deferred.promise();
     }
 
-    function readCurrentEnergy() {
-        const elem = document.querySelector('header.header .energy .value');
-        if (elem == null) return;
-        const value = elem.textContent;
-        return parseInt(value.slice(0, -1)); // remove % and parse
-    }
+    function fetchState() {
+        const deferred = $.Deferred();
 
-    function initMoney() {
-        currentMoney = readCurrentMoney();
-        if (currentMoney == null) {
-            console.log('Can\'t read money. Kiwi does not load? Not signed in?');
-            return false;
-        }
-        console.log('currentMoney=', currentMoney);
+        $.get('https://wf.my.com/minigames/bp4/info/compose?methods=settings.avatar,user.info,settings.main,main.fund,tasks.active_tasks')
+            .done((data) => {
+                kiwiState = data.data;
+                if (data.state === 'Success') {
+                    //console.info(kiwiState);
+                    console.info('State fetched. Money:', currentMoney(), 'Energy:', currentEnergy());
+                    deferred.resolve();
+                } else {
+                    console.error('Fetched non success data', JSON.stringify(data));
+                    setupSlowRefresh();
+                    deferred.reject();
+                }
+            }).fail(() => {
+                console.error('Failed to load init data');
+                deferred.reject();
+            });
 
-        return Promise.resolve();
-    }
-
-    function readCurrentMoney() {
-        const elem = document.querySelector('header.header .points .value');
-        if (elem == null) return;
-        const value = elem.textContent;
-        return parseInt(value); // remove % and parse
+        return deferred.promise();
     }
 
     function runOperations(funcs) {
@@ -411,12 +413,15 @@
     }
 
     function requestRefresh() {
-        setTimeout(function () {
-            window.location.reload(false);
-        }, refreshDelayMillis);
+        if (!refreshAlreadySetUp) {
+            refreshAlreadySetUp = true;
 
-        // TODO: somehow it is always started 2 times
-        console.log('Scheduled page reload in ' + (refreshDelayMillis / 1000) + ' secs');
+            setTimeout(function () {
+                window.location.reload(false);
+            }, refreshDelayMillis);
+
+            console.info('Scheduled page reload in ' + (refreshDelayMillis / 1000) + ' secs');
+        }
     }
 
     /**
@@ -432,7 +437,7 @@
      * executionChain.submit(function() {
      *     var deferred = $.Deferred();
      *     setTimeout(function () {
-     *         console.log('Completed');
+     *         console.info('Completed');
      *         deferred.resolve();
      *     }, 2000);
      *     return deferred.promise();
@@ -455,8 +460,13 @@
         return this;
     }
 
-    function permaLog(msg) {
-        console.log(msg);
+    function permaLog(msg, css) {
+        if (css) {
+            console.info('%c' + msg, css);
+        } else {
+            console.info(msg);
+        }
+
         db.permaLog.put({ msg: msg, time: new Date() });
     }
 
@@ -467,7 +477,7 @@
         const tailLength = 20;
 
         db.permaLog.each(log => {
-            //console.log(log.time, log.msg);
+            //console.info(log.time, log.msg);
             const msg = log.msg;
             //const day = log.time.toLocaleDateString("de-DE", { month: '2-digit', day: '2-digit'});
             const day = ('0' + (log.time.getMonth() + 1)).slice(-2) + '.'
@@ -512,7 +522,7 @@
             report.summary.permanents = report.permanents.length;
 
         }).then(() => {
-            console.log('Report:', report);
+            console.info('Report:', report);
         });
 
         function dayStatsUpdated(dayStats) {
@@ -545,7 +555,7 @@
             report.tail.push(text);
         }
 
-        return 'Report will be printed.';
+        return 'Generating report...';
     };
 
     window.ka_deleteLogs = function (fromId, toId, msgFilter) {
@@ -563,7 +573,7 @@
         //    statement = statement.equalsIgnoreCase()
         //}
         statement.delete().then(() => {
-            console.log('Deleted.');
+            console.info('Deleted.');
         });
 
         return 'Deleting...';
