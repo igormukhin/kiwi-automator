@@ -20,10 +20,10 @@
     const fastRefreshDelayMillis = 100;
     const slowRefreshDelayMillis = 600 * 1000;
 
-    const energyForStars = {
-      1: 3,
-      2: 7,
-      3: 10
+    const starsAttrs = {
+        1: { energyCost: 3, durationMin: 15 },
+        2: { energyCost: 7, durationMin: 30 },
+        3: { energyCost: 10, durationMin: 60 }
     };
 
     // engi (intellect: 5, luck: 10)
@@ -271,10 +271,10 @@
     function sendToMission() {
         let stars = null;
         if (autosendToMission.enabled) {
-            if (currentEnergy() >= energyForStars[autosendToMission.stars]) {
+            if (currentEnergy() >= starsAttrs[autosendToMission.stars].energyCost) {
                 stars = autosendToMission.stars;
             } else if (autosendToMission.starsOnLowEnergy > 0
-                    && currentEnergy() >= energyForStars[autosendToMission.starsOnLowEnergy]) {
+                && currentEnergy() >= starsAttrs[autosendToMission.starsOnLowEnergy].energyCost) {
                 stars = autosendToMission.starsOnLowEnergy;
             }
         }
