@@ -99,7 +99,7 @@
 
         // start operations
         runOperations([ initialDelay, fetchState,
-            openMissionWindow, detectOnMission, buyEnergy, sendToMission,
+            waitForMissionResults, buyEnergy, sendToMission,
             nothingToDo ]);
     }
 
@@ -117,155 +117,134 @@
         return Promise.reject();
     }
 
-    function openMissionWindow() {
-        //if (!autosendToMission.enabled) {
-        //    return Promise.resolve();
-        //}
-
+    function openMissionWindow(continent, mission) {
         const deferred = $.Deferred();
-        //console.info('Opening mission dialog...');
 
         setTimeout(function () {
             // open continent
-            const pointBtn = document.querySelector('section.map .map__point.point-' + autosendToMission.continent
+            const $pointBtn = $('section.map .map__point.point-' + continent
                 + ' .map__point__options .button');
-            if (!pointBtn) {
+            if (!$pointBtn.length) {
                 console.error('cant find continent');
                 deferred.reject();
                 return;
             }
-            simulateClick(pointBtn);
+            $pointBtn.trigger('click');
 
-            setTimeout(function () {
-                // open mission dialog
-                const $missionBtn = $('div.tasks.' + autosendToMission.continent +
-                    ' .tasks__item .avatar:has(.name span:contains(\'' + autosendToMission.mission + '\'))');
-                if (!$missionBtn.length) {
-                    console.error('cant find mission');
-                    deferred.reject();
-                    return;
-                }
-                $missionBtn.trigger('click');
-
+            if (mission == null) {
+                //console.info('Continent window opened');
+                deferred.resolve();
+            } else {
                 setTimeout(function () {
-                    // check mission here
-                    const $title = $('div.tasks__window.avatar .tasks__info__top h4:contains(\'' + autosendToMission.mission + '\')');
-                    if (!$title.length) {
-                        console.error('Failure: Mission is not correct!');
-                        setupSlowRefresh();
+                    // open mission dialog
+                    const $missionBtn = $('div.tasks.' + continent +
+                        ' .tasks__item .avatar:has(.name span:contains(\'' + mission + '\'))');
+                    if (!$missionBtn.length) {
+                        console.error('cant find mission');
                         deferred.reject();
                         return;
                     }
+                    $missionBtn.trigger('click');
 
-                    //console.info('Mission window opened');
+                    setTimeout(function () {
+                        // check mission here
+                        const $title = $('div.tasks__window.avatar .tasks__info__top h4:contains(\'' + mission + '\')');
+                        if (!$title.length) {
+                            console.error('Failure: Mission is not correct!');
+                            deferred.reject();
+                            return;
+                        }
 
-                    // continue the execution chain
-                    deferred.resolve();
-                }, 500)
-            }, 500);
+                        //console.info('Mission window opened');
+
+                        // continue the execution chain
+                        deferred.resolve();
+                    }, 500)
+                }, 1000);
+            }
         }, 10);
 
         return deferred.promise();
     }
 
-    function detectOnMission() {
-        //if (!autosendToMission.enabled) {
-        //    return Promise.resolve();
-        //}
-
-        const deferred = $.Deferred();
-        //console.info('Checking if character is on the mission...');
-
-        // check wrong mission
-        const $taskWindow = $('div.tasks__window.avatar');
-        const $onMissionText = $taskWindow.find('.bottom'
-            + ' .completed__text:contains(\'' + autosendToMission.characterOnMissionText + '\')');
-        if ($onMissionText.length) {
-            console.warn('Detected character is on OTHER mission! You have to finish other mission manually!');
-            setupSlowRefresh();
-            return Promise.reject();
+    function waitForMissionResults() {
+        let task = kiwiState.tasks.active_tasks.find(t => t.type === 'avatar');
+        if (!task) {
+            return Promise.resolve();
         }
 
-        // check if on mission waiting
-        const $waiting = $taskWindow.find('.prize_container.processing');
-        const $rewardCont = $taskWindow.find('.avatar__reward');
-        const $gettingResults = $taskWindow.find('.bottom'
-            + ' .completed__text:contains(\'' + autosendToMission.gettingResultsText + '\')');
-        if ($waiting.length || $rewardCont.length || $gettingResults.length) {
-            console.info('Detected character on mission');
+        const deferred = $.Deferred();
 
-            let secsLeft = null;
-            const $timer = $taskWindow.find('.timer__text');
-            if ($timer.length) {
-                const timeStr = $timer.text();
-                if (timeStr.indexOf(':') !== -1) {
-                    secsLeft = 60 * parseInt(timeStr.substring(3, 5));
-                } else {
-                    secsLeft = parseInt(timeStr);
-                }
-                //console.info('Seconds to mission end =', secsLeft);
-            }
-
-            if (secsLeft != null && secsLeft >= 60) {
-                // wait until 1 minute left and then reload page
-                let waitForSecs = secsLeft - 60;
-                if (waitForSecs === 0) {
-                    waitForSecs = 45;
-                }
-
-                console.info('Waiting mission end for ' + waitForSecs + ' secs.');
-                setTimeout(function () {
-                    setupFastRefresh();
+        let completeTime = task.started_at + starsAttrs[task.progress].durationMin * 60;
+        let waitTimeSec = Math.floor(completeTime - (new Date().getTime() / 1000));
+        if (waitTimeSec >= 60) {
+            openMissionWindow(task.chain, null)
+                .done(() => {
+                    let waitLess = (waitTimeSec - 30);
+                    console.info('On mission ' + task.chain + '/' + task.title
+                        + '. Awaiting completion for ' + waitLess + ' secs.');
+                    setTimeout(function () {
+                        setupFastRefresh();
+                        deferred.reject();
+                    }, waitLess * 1000);
+                })
+                .fail(() => {
                     deferred.reject();
-                }, waitForSecs * 1000);
-                return deferred.promise();
-            }
-
-            // under minute time left or even results are here
-            // wait for close button to come up
-            console.info('Waiting for mission results to come up');
-            let intervalTimes = 0;
-            const intervalDuration = 1000;
-            const intervalMaxTimes = 120;
-            const intervalId = setInterval(function () {
-                const $reward = $taskWindow.find('.avatar__reward');
-                const $closeBtn = $reward.find('.button:contains(\'' + autosendToMission.closeButtonText + '\')');
-                if ($closeBtn.length) {
-                    const $failed = $reward.find('.failed');
-                    const $success = $reward.find('.success');
-                    if ($failed.length) {
-                        permaLog('Mission FAILED.', 'color: #7B241C; font-weight: bold;');
-                    } else if ($success.length) {
-                        permaLog('Mission SUCCESS. Reward: '
-                            + $reward.find('.prize_item .name').text()
-                            + ' ' + $reward.find('.prize_item .time').text(), 'color: #196F3D; font-weight: bold;');
-                    } else {
-                        permaLog('Error: Mission result not found');
-                    }
-
-                    //setupFastRefresh();
-                    clearInterval(intervalId);
-                    deferred.reject();
-                    return;
-                }
-
-                intervalTimes++;
-                // too many repetitions
-                if (intervalTimes > intervalMaxTimes) {
-                    permaLog('Waited for mission results for too long.');
-                    setupFastRefresh();
-                    deferred.reject();
-                }
-            }, intervalDuration);
+                });
 
         } else {
-            console.info('Character is not on mission');
+            openMissionWindow(task.chain, task.title)
+                .done(() => {
+                    processMissionResults(deferred, task);
+                })
+                .fail(() => {
+                    setupSlowRefresh();
+                    deferred.reject();
+                });
 
-            // continue the execution chain
-            deferred.resolve();
         }
 
         return deferred.promise();
+    }
+
+    function processMissionResults(deferred, task) {
+        // under minute time left or even results are here
+        console.info('Waiting for mission results to come up');
+
+        const $taskWindow = $('div.tasks__window.avatar');
+        let intervalTimes = 0;
+        const intervalDuration = 1000;
+        const intervalMaxTimes = 120;
+        const intervalId = setInterval(function () {
+            const $reward = $taskWindow.find('.avatar__reward');
+            const $closeBtn = $reward.find('.button:contains(\'' + autosendToMission.closeButtonText + '\')');
+            if ($closeBtn.length) {
+                const $failed = $reward.find('.failed');
+                const $success = $reward.find('.success');
+                if ($failed.length) {
+                    permaLog('Mission FAILED.', 'color: #7B241C; font-weight: bold;');
+                } else if ($success.length) {
+                    permaLog('Mission SUCCESS. Reward: '
+                        + $reward.find('.prize_item .name').text()
+                        + ' ' + $reward.find('.prize_item .time').text(), 'color: #196F3D; font-weight: bold;');
+                } else {
+                    permaLog('Error: Mission result not found');
+                }
+
+                clearInterval(intervalId);
+                deferred.reject();
+                return;
+            }
+
+            intervalTimes++;
+            // too many repetitions
+            if (intervalTimes > intervalMaxTimes) {
+                clearInterval(intervalId);
+                permaLog('Waited for mission results for too long.');
+                setupFastRefresh();
+                deferred.reject();
+            }
+        }, intervalDuration);
     }
 
     function sendToMission() {
@@ -285,20 +264,34 @@
         const deferred = $.Deferred();
         //console.info('Sending to mission...');
 
+        openMissionWindow(autosendToMission.continent, autosendToMission.mission)
+            .done(() => {
+                doSendToCurrentMission(deferred, stars);
+            })
+            .fail(() => {
+                setupSlowRefresh();
+                deferred.reject();
+            });
+
+        return deferred.promise();
+    }
+
+    function doSendToCurrentMission(deferred, stars) {
         // select stars
-        const $starsBtn = $('div.tasks__window.avatar .stars_list:nth-child(' + stars + ')');
+        const $taskWindow = $('div.tasks__window.avatar');
+        const $starsBtn = $taskWindow.find('.stars_list:nth-child(' + stars + ')');
         if (!$starsBtn.length) {
-            console.error('cant find stars');
+            console.error('can\'t find stars');
             deferred.reject();
-            return deferred.promise();
+            return;
         }
         $starsBtn.trigger('click');
 
         setTimeout(function () {
             // sending to mission
-            const $sendBtn = $('div.tasks__window.avatar .button:contains(\'' + autosendToMission.sendButtonText + '\')');
+            const $sendBtn = $taskWindow.find('.button:contains(\'' + autosendToMission.sendButtonText + '\')');
             if (!$sendBtn.length) {
-                console.error('cant find send button');
+                console.error('can\'t find send button');
                 deferred.reject();
                 return;
             }
@@ -309,34 +302,7 @@
             // don't continue the chain
             deferred.reject();
         }, 1000);
-
-        return deferred.promise();
     }
-
-    function simulateClick(elem, evtName) {
-        const evt = new MouseEvent(evtName || 'click', {
-            bubbles: true,
-            cancelable: true,
-            view: window
-        });
-        elem.dispatchEvent(evt);
-    }
-
-    /*
-    function closeMissionWindow() {
-        const deferred = $.Deferred();
-
-        // close continent dialog
-        var $closeBtn = $('section > .screen > .screen__inner > .close');
-        $closeBtn.trigger('click');
-
-        setTimeout(() => {
-            deferred.resolve();
-        }, 200);
-
-        return deferred.promise();
-    }
-    */
 
     function buyEnergy() {
         if (autobuyEnergy.enabled
@@ -397,9 +363,9 @@
                     deferred.reject();
                 }
             }).fail(() => {
-                console.error('Failed to load init data');
-                deferred.reject();
-            });
+            console.error('Failed to load init data');
+            deferred.reject();
+        });
 
         return deferred.promise();
     }
@@ -549,7 +515,7 @@
             }
 
             let formattedTime = time.toLocaleDateString('de-DE', { year: 'numeric', month: '2-digit', day: '2-digit' })
-                    + " " + time.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit'});
+                + " " + time.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit'});
             let text = formattedTime + ' ' + mission + ' ' + result + (reward ? ' ' + reward : '');
 
             report.tail.push(text);
