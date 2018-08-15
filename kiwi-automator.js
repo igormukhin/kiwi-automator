@@ -20,37 +20,48 @@
     const fastRefreshDelayMillis = 100;
     const slowRefreshDelayMillis = 600 * 1000;
 
+    // For Lucky and Athlete
     const starsAttrs = {
         1: { energyCost: 3, durationMin: 15 },
         2: { energyCost: 7, durationMin: 30 },
         3: { energyCost: 10, durationMin: 60 }
     };
+    const successMoneyReward = 10;
+    const energyPurchasePrice = 50;
+
 
     // engi (intellect: 5, luck: 10)
-    const mission_Water = {
-        continent: 'icebreaker',
-        mission: 'Water',
+    const mission_icebreaker_Water = {
+        chain: 'icebreaker',
+        title: 'Water',
         companion: { s: 0, i: 5, d: 1, c: 4, l: 10 }
     };
 
     // med (charisma: 6, luck: 10)
-    const mission_Bear = {
-        continent: 'icebreaker',
-        mission: 'Bear',
+    const mission_icebreaker_Bear = {
+        chain: 'icebreaker',
+        title: 'Bear',
         companion: { s: 0, i: 3, d: 1, c: 6, l: 10 }
     };
 
     // rifleman (strength: 0, luck: 10)
-    const mission_Sphinx = {
-        continent: 'anubis',
-        mission: 'Sphinx',
+    const mission_anubis_Sphinx = {
+        chain: 'anubis',
+        title: 'Sphinx',
         companion: { s: 0, i: 3, d: 1, c: 6, l: 10 }
     };
 
     // rifleman (strength: 0, luck: 10)
-    const mission_School = {
-        continent: 'pripyat',
-        mission: 'School',
+    const mission_pripyat_School = {
+        chain: 'pripyat',
+        title: 'School',
+        companion: { s: 0, i: 3, d: 1, c: 6, l: 10 }
+    };
+
+    // rifleman (strength: 0, luck: 10)
+    const mission_shark_Hammer = {
+        chain: 'shark',
+        title: 'Hammer',
         companion: { s: 0, i: 3, d: 1, c: 6, l: 10 }
     };
 
@@ -58,28 +69,23 @@
      * Engi missions: pripyat/Wheel, shark/Bite, icebreaker/Water, volcano/Ararat, anubis/Oasis
      * Medic missions: icebreaker/Bear
      * Rifleman: pripyat/School, anubis/Sphinx
-     *
-     * NOTE: After changing the mission, remember to get the results of the previous mission manually. It will not
-     * happen automatically.
      */
+    const localization = {
+        sendButtonText: 'Send',
+        closeButtonText: 'Close'
+    };
+
     const autosendToMission = {
         enabled: true,
-        continent: 'pripyat',
-        mission: 'School',
+        mission: mission_shark_Hammer,
         stars: 1,
-        starsOnLowEnergy: 1,
-        winMoneyReward: 10,
-        sendButtonText: 'Send',
-        closeButtonText: 'Close',
-        characterOnMissionText: 'Character on mission',
-        gettingResultsText: 'Getting results'
+        starsOnLowEnergy: 1
     };
 
     const autobuyEnergy = {
         enabled: true,
         buyIfEnergyLessThen: 3,
-        buyIfMoneyMoreThen: 100,
-        price: 50
+        buyIfMoneyMoreThen: 100
     };
 
     let kiwiState = null;
@@ -117,28 +123,28 @@
         return Promise.reject();
     }
 
-    function openMissionWindow(continent, mission) {
+    function openMissionWindow(chain, missionTitle) {
         const deferred = $.Deferred();
 
         setTimeout(function () {
-            // open continent
-            const $pointBtn = $('section.map .map__point.point-' + continent
+            // open chain
+            const $pointBtn = $('section.map .map__point.point-' + chain
                 + ' .map__point__options .button');
             if (!$pointBtn.length) {
-                console.error('cant find continent');
+                console.error('cant find chain');
                 deferred.reject();
                 return;
             }
             $pointBtn.trigger('click');
 
-            if (mission == null) {
-                //console.info('Continent window opened');
+            if (missionTitle == null) {
+                //console.info('Chain window opened');
                 deferred.resolve();
             } else {
                 setTimeout(function () {
                     // open mission dialog
-                    const $missionBtn = $('div.tasks.' + continent +
-                        ' .tasks__item .avatar:has(.name span:contains(\'' + mission + '\'))');
+                    const $missionBtn = $('div.tasks.' + chain +
+                        ' .tasks__item .avatar:has(.name span:contains(\'' + missionTitle + '\'))');
                     if (!$missionBtn.length) {
                         console.error('cant find mission');
                         deferred.reject();
@@ -148,7 +154,7 @@
 
                     setTimeout(function () {
                         // check mission here
-                        const $title = $('div.tasks__window.avatar .tasks__info__top h4:contains(\'' + mission + '\')');
+                        const $title = $('div.tasks__window.avatar .tasks__info__top h4:contains(\'' + missionTitle + '\')');
                         if (!$title.length) {
                             console.error('Failure: Mission is not correct!');
                             deferred.reject();
@@ -217,7 +223,7 @@
         const intervalMaxTimes = 120;
         const intervalId = setInterval(function () {
             const $reward = $taskWindow.find('.avatar__reward');
-            const $closeBtn = $reward.find('.button:contains(\'' + autosendToMission.closeButtonText + '\')');
+            const $closeBtn = $reward.find('.button:contains(\'' + localization.closeButtonText + '\')');
             if ($closeBtn.length) {
                 const $failed = $reward.find('.failed');
                 const $success = $reward.find('.success');
@@ -264,7 +270,7 @@
         const deferred = $.Deferred();
         //console.info('Sending to mission...');
 
-        openMissionWindow(autosendToMission.continent, autosendToMission.mission)
+        openMissionWindow(autosendToMission.mission.chain, autosendToMission.mission.title)
             .done(() => {
                 doSendToCurrentMission(deferred, stars);
             })
@@ -289,7 +295,7 @@
 
         setTimeout(function () {
             // sending to mission
-            const $sendBtn = $taskWindow.find('.button:contains(\'' + autosendToMission.sendButtonText + '\')');
+            const $sendBtn = $taskWindow.find('.button:contains(\'' + localization.sendButtonText + '\')');
             if (!$sendBtn.length) {
                 console.error('can\'t find send button');
                 deferred.reject();
@@ -297,7 +303,7 @@
             }
 
             $sendBtn.trigger('click');
-            permaLog('Sent to mission: ' + autosendToMission.continent + '/' + autosendToMission.mission + '/' + stars);
+            permaLog('Sent to mission: ' + autosendToMission.mission.chain + '/' + autosendToMission.mission.title + '/' + stars);
 
             // don't continue the chain
             deferred.reject();
@@ -453,14 +459,14 @@
             const dayStats = report.days[day];
             if (msg.indexOf('Energy purchased') !== -1) {
                 dayStats.energyBuys++;
-                dayStats.money -= autobuyEnergy.price;
+                dayStats.money -= energyPurchasePrice;
 
             } else if (msg.indexOf('Sent to mission: ') === 0) {
                 mission = msg.substring('Sent to mission: '.length);
 
             } else if (msg.indexOf('SUCCESS') !== -1) {
                 dayStats.won++;
-                dayStats.money += autosendToMission.winMoneyReward;
+                dayStats.money += successMoneyReward;
                 dayStatsUpdated(dayStats);
 
                 let numOfPermanents = 0;
