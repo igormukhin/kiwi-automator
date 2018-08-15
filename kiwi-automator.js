@@ -20,6 +20,12 @@
     const fastRefreshDelayMillis = 100;
     const slowRefreshDelayMillis = 600 * 1000;
 
+    // IMPORTANT: Edit here for your language
+    const localization = {
+        sendButtonText: 'Send',
+        closeButtonText: 'Close'
+    };
+
     // For Lucky and Athlete
     const starsAttrs = {
         1: { energyCost: 3, durationMin: 15 },
@@ -65,19 +71,21 @@
         companion: { s: 0, i: 3, d: 1, c: 6, l: 10 }
     };
 
+    // sniper (dexterity: 1, luck: 10)
+    const mission_pripyat_Death = {
+        chain: 'pripyat',
+        title: 'Death',
+        companion: { s: 0, i: 3, d: 1, c: 6, l: 10 }
+    };
+
     /**
      * Engi missions: pripyat/Wheel, shark/Bite, icebreaker/Water, volcano/Ararat, anubis/Oasis
      * Medic missions: icebreaker/Bear
      * Rifleman: pripyat/School, anubis/Sphinx
      */
-    const localization = {
-        sendButtonText: 'Send',
-        closeButtonText: 'Close'
-    };
-
     const autosendToMission = {
         enabled: true,
-        mission: mission_shark_Hammer,
+        mission: mission_pripyat_Death,
         stars: 1,
         starsOnLowEnergy: 1
     };
