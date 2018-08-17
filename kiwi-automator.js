@@ -40,7 +40,8 @@
     // The data will be used for reporting.
     const companionAttrs = [
         { after_id: 0, attrs: { s: 0, i: 5, d: 1, c: 4, l: 10 } },
-        { after_id: 1905, attrs: { s: 0, i: 3, d: 1, c: 6, l: 10 } }
+        { after_id: 1905, attrs: { s: 0, i: 3, d: 1, c: 6, l: 10 } },
+        { after_id: 4149, attrs: { s: 0, i: 3, d: 1, c: 10, l: 6 } }
     ];
 
     /**
@@ -83,23 +84,34 @@
             chain: 'pripyat',
             title: 'Wheel',
             profile: 'i' // intellect (engi)
+        },
+        pripyat_1986: {
+            chain: 'pripyat',
+            title: '1986',
+            profile: 'c' // charisma (med)
+        },
+        volcano_Taupo: {
+            chain: 'volcano',
+            title: 'Taupo',
+            profile: 's' // strength (rifleman)
         }
     };
 
     /*
-    Выводы и предположения о распределении очков характеристих (lvl50/Лаки/Атлет):
+    Выводы и предположения о распределении очков характеристих (level-50/Лаки/Атлет):
     - Количество звезд миссии не влияет на Шанс Успешного Прохода (ШУС)
-    - ШУС для непрофильных миссий (где характеристика < 5) и удача 10 составляет приблиз. 70%
-    - ШУС для профильных миссий (где характеристика >= 5) и удача 10 составляет приблиз. 50%
-      при профильной пятерке и 55% при профильной шестерке
+    - ШУС при профильной характеристике 0 или 1 и при удаче 10 составляет приблиз. 70%
+    - ШУС при профильной характеристике > 2 и при удаче 10 составляет около 50%.
+      При профильной шестерке было 55%.
     - Пока единственный предмет навсегда выпал на профильной шестерке. Вероятно профильная
       характеристика увеличивает шанс на получение предмета навсегда.
      */
 
     const autosendToMission = {
         enabled: true,
-        mission: (new Date().getDate() > 16 ? missions.pripyat_Wheel : missions.pripyat_Death),
-        stars: 1,
+        mission: missions.pripyat_1986,
+        stars: 3,
+        missionOnLowEnergy: missions.volcano_Taupo,
         starsOnLowEnergy: 1
     };
 
@@ -191,55 +203,60 @@
         }
     }
 
-    function waitForMissionResults() {
-        let task = kiwiState.tasks.active_tasks.find(t => t.type === 'avatar');
-        if (!task) {
-            return Promise.resolve();
+    async function getCurrentStars(task) {
+        let response = await $.get('https://wf.my.com/minigames/bp4/info/tasks?chain=' + task.chain);
+
+        // response.data.tasks.[colId].[taskId].current_star
+        // ... .remaining_time
+        for (const col_id in response.data.tasks) {
+            let col = response.data.tasks[col_id];
+            for (let mission_id in col) {
+                let mission = col[mission_id];
+                if (mission.id === task.task_id) {
+                    return mission.current_star;
+                }
+            }
         }
 
-        const deferred = $.Deferred();
-
-        let completeTime = task.started_at + starsAttrs[task.progress].durationMin * 60;
-        let waitTimeSec = Math.floor(completeTime - (new Date().getTime() / 1000));
-        if (waitTimeSec >= 60) {
-            openMissionWindow(task.chain, null)
-                .then(() => {
-                    let waitLess = (waitTimeSec - 15);
-                    console.info('On mission ' + task.chain + '/' + task.title
-                        + '. Awaiting completion for ' + waitLess + ' secs.');
-                    setTimeout(function () {
-                        setupFastRefresh();
-                        deferred.reject();
-                    }, waitLess * 1000);
-                })
-                .catch(() => {
-                    deferred.reject();
-                });
-
-        } else {
-            openMissionWindow(task.chain, task.title)
-                .then(() => {
-                    processMissionResults(deferred, task);
-                })
-                .catch(() => {
-                    setupSlowRefresh();
-                    deferred.reject();
-                });
-
-        }
-
-        return deferred.promise();
+        throw new Error('mission not found');
     }
 
-    function processMissionResults(deferred, task) {
-        // under minute time left or even results are here
+    async function waitForMissionResults() {
+        let task = kiwiState.tasks.active_tasks.find(t => t.type === 'avatar');
+        if (!task) {
+            return;
+        }
+
+        let currentStars = await getCurrentStars(task);
+
+        let completeTime = task.started_at + starsAttrs[currentStars].durationMin * 60;
+        let waitTimeSec = Math.floor(completeTime - (new Date().getTime() / 1000));
+        if (waitTimeSec >= 60) {
+            await openMissionWindow(task.chain, null);
+
+            let waitLess = (waitTimeSec - 15);
+            console.info('On mission ' + task.chain + '/' + task.title
+                + '. Awaiting completion for ' + waitLess + ' secs.');
+
+            await delay(waitLess * 1000);
+
+            setupFastRefresh();
+
+        } else {
+            await openMissionWindow(task.chain, task.title);
+            await processMissionResults(task);
+
+        }
+
+        // don't continue the chain
+        return Promise.reject();
+    }
+
+    async function processMissionResults(task) {
         console.info('Waiting for mission results to come up');
 
         const $taskWindow = $('div.tasks__window.avatar');
-        let intervalTimes = 0;
-        const intervalDuration = 1000;
-        const intervalMaxTimes = 120;
-        const intervalId = setInterval(function () {
+        await waitUntil(0, 1000, 120, () => {
             const $reward = $taskWindow.find('.avatar__reward');
             const $closeBtn = $reward.find('.button:contains(\'' + localization.closeButtonText + '\')');
             if ($closeBtn.length) {
@@ -247,117 +264,88 @@
                 const $success = $reward.find('.success');
                 if ($failed.length) {
                     permaLog('Mission FAILED.', 'color: #7B241C; font-weight: bold;');
+                    return true;
                 } else if ($success.length) {
                     permaLog('Mission SUCCESS. Reward: '
                         + $reward.find('.prize_item .name').text()
                         + ' ' + $reward.find('.prize_item .time').text(), 'color: #196F3D; font-weight: bold;');
-                } else {
-                    permaLog('Error: Mission result not found');
+                    return true;
                 }
-
-                clearInterval(intervalId);
-                deferred.reject();
-                return;
             }
-
-            intervalTimes++;
-            // too many repetitions
-            if (intervalTimes > intervalMaxTimes) {
-                clearInterval(intervalId);
-                permaLog('Waited for mission results for too long.');
-                setupFastRefresh();
-                deferred.reject();
-            }
-        }, intervalDuration);
+        });
     }
 
-    function buyEnergy() {
+    async function buyEnergy() {
         if (autobuyEnergy.enabled
             && currentEnergy() < autobuyEnergy.buyIfEnergyLessThen
             && currentMoney() > autobuyEnergy.buyIfMoneyMoreThen) {
 
-            const deferred = $.Deferred();
             console.info('Buying energy...');
 
-            $.post('https://wf.my.com/minigames/bp4/user/buy-energy').done((data) => {
+            try {
+                let data = await $.post('https://wf.my.com/minigames/bp4/user/buy-energy');
+                // {"state":"Success","data":{"energy":{"from_energy":1,"to_energy":100,"points":1889}}}
 
                 if (data.state === 'Success') {
-                    console.info(JSON.stringify(data));
                     permaLog('Energy purchased');
-                    deferred.reject();
+                    // don't continue the chain
+                    return Promise.reject();
                 } else {
-                    setupSlowRefresh();
-                    console.error('Fetched non success data', JSON.stringify(data));
-                    deferred.reject();
+                    throw new Error('Fetched non success data' + JSON.stringify(data));
                 }
 
-            }).fail(() => {
+            } catch (e) {
                 setupSlowRefresh();
-                console.error('Failed to buy energy');
-                deferred.reject();
-            });
-
-            return deferred.promise();
-        } else {
-            return Promise.resolve();
+                throw e;
+            }
         }
     }
 
-    function sendToMission() {
+    async function sendToMission() {
         let stars = null;
+        let mission = autosendToMission.mission;
         if (autosendToMission.enabled) {
             if (currentEnergy() >= starsAttrs[autosendToMission.stars].energyCost) {
                 stars = autosendToMission.stars;
             } else if (autosendToMission.starsOnLowEnergy > 0
                 && currentEnergy() >= starsAttrs[autosendToMission.starsOnLowEnergy].energyCost) {
                 stars = autosendToMission.starsOnLowEnergy;
+                mission = autosendToMission.missionOnLowEnergy || mission;
             }
         }
         if (stars === null) {
-            return Promise.resolve();
+            return;
         }
 
-        const deferred = $.Deferred();
         //console.info('Sending to mission...');
 
-        openMissionWindow(autosendToMission.mission.chain, autosendToMission.mission.title)
-            .then(() => {
-                doSendToCurrentMission(deferred, stars);
-            })
-            .catch(() => {
-                setupSlowRefresh();
-                deferred.reject();
-            });
+        await openMissionWindow(mission.chain, mission.title);
+        await doSendToCurrentMission(stars);
 
-        return deferred.promise();
+        permaLog('Sent to mission: ' + mission.chain + '/' + mission.title + '/' + stars);
+        // don't continue the chain
+        return Promise.reject();
     }
 
-    function doSendToCurrentMission(deferred, stars) {
+    async function doSendToCurrentMission(stars) {
         // select stars
         const $taskWindow = $('div.tasks__window.avatar');
         const $starsBtn = $taskWindow.find('.stars_list:nth-child(' + stars + ')');
         if (!$starsBtn.length) {
-            console.error('can\'t find stars');
-            deferred.reject();
-            return;
+            throw new Error('can\'t find stars');
         }
         $starsBtn.trigger('click');
 
-        setTimeout(function () {
-            // sending to mission
-            const $sendBtn = $taskWindow.find('.button:contains(\'' + localization.sendButtonText + '\')');
-            if (!$sendBtn.length) {
-                console.error('can\'t find send button');
-                deferred.reject();
-                return;
-            }
+        await delay(500);
 
-            $sendBtn.trigger('click');
-            permaLog('Sent to mission: ' + autosendToMission.mission.chain + '/' + autosendToMission.mission.title + '/' + stars);
+        // sending to mission
+        const $sendBtn = $taskWindow.find('.button:contains(\'' + localization.sendButtonText + '\')');
+        if (!$sendBtn.length) {
+            throw new Error('can\'t find send button');
+        }
+        $sendBtn.trigger('click');
 
-            // don't continue the chain
-            deferred.reject();
-        }, 1000);
+        await delay(500);
     }
 
     function nothingToDo() {
@@ -504,7 +492,6 @@
         return report;
     };
 
-    /*
     window.ka_deleteLogs = async function (fromId, toId, msgFilterTODO) {
         if (!fromId) {
             throw new Error('Error: syntax window.ka_deleteLogs(fromId [, toId][, msgFilter])');
@@ -532,6 +519,5 @@
         }
         return str + " " + (((str.match(/X/g) || []).length) / length).toLocaleString('de', {style: 'percent'});
     }
-    */
 
 })(console, window, document, jQuery);
