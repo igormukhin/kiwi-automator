@@ -110,12 +110,19 @@
 
     const autosendToMission = {
         enabled: true,
-        task: {
-            //mission: missions.pripyat_1986,
-            //stars: 3
-            mission: missions.volcano_Taupo,
-            stars: 1
-        },
+        task: (function () {
+            if (new Date().getDate() % 2 === 0) {
+                return {
+                    mission: missions.pripyat_1986,
+                    stars: 3
+                }
+            } else {
+                return {
+                    mission: missions.volcano_Taupo,
+                    stars: 1
+                }
+            }
+        })(),
         lowEnergyTask: {
             mission: missions.volcano_Taupo,
             stars: 1
@@ -198,10 +205,10 @@
 
             if (data.state === 'Success') {
                 for (const chest of data.data.user_chests) {
-                    //console.log(chest);
                     if (chest.state === 'new') {
                         await $.post('https://wf.my.com/minigames/bp4/craft/start', { 'chest_id' : chest.id });
-                        console.info('Started crafting ' + chest.type + ' create with id=' + chest.id);
+                        console.info('%cStarted crafting ' + chest.type + ' create',
+                            'color: lightblue; font-weight: bold');
                     } else if (chest.state === 'awaiting' && chest.ended_at < 0) {
                         let openResponse = await $.post('https://wf.my.com/minigames/bp4/craft/open',
                             { 'chest_id' : chest.id, 'paid': 0 });
