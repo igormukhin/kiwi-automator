@@ -11,7 +11,7 @@
 // @grant        none
 // ==/UserScript==
 
-(function(console, window, document, $) {
+(function(console, window, document, $, localStorage) {
     'use strict';
 
     const waitBeforeStartMillis = 1000;
@@ -23,7 +23,8 @@
     // IMPORTANT: Edit here for your language
     const localization = {
         sendButtonText: 'Send',
-        closeButtonText: 'Close'
+        closeButtonText: 'Close',
+        permanent: 'Permanent' /* Навсегда */
     };
 
     // For Lucky and Athlete
@@ -109,10 +110,16 @@
 
     const autosendToMission = {
         enabled: true,
-        mission: missions.pripyat_1986,
-        stars: 3,
-        missionOnLowEnergy: missions.volcano_Taupo,
-        starsOnLowEnergy: 1
+        task: {
+            //mission: missions.pripyat_1986,
+            //stars: 3
+            mission: missions.volcano_Taupo,
+            stars: 1
+        },
+        lowEnergyTask: {
+            mission: missions.volcano_Taupo,
+            stars: 1
+        }
     };
 
     const autobuyEnergy = {
@@ -136,6 +143,7 @@
         // start operations
         try {
             await fetchState();
+            await handleCraftingCrates();
             await waitForMissionResults();
             await buyEnergy();
             await sendToMission();
@@ -173,6 +181,46 @@
             console.error('Failed to load kiwi state');
             setupSlowRefresh();
             throw e;
+        }
+    }
+
+    async function handleCraftingCrates() {
+        const lastTime = parseInt(localStorage.getItem('crafting.last'));
+        if (lastTime && lastTime + 15 * 60 * 1000 > new Date().getTime()) {
+            return;
+        }
+        localStorage.setItem('crafting.last', new Date().getTime().toString());
+
+        console.log('Handling crafting creates...');
+
+        try {
+            let data = await $.get('https://wf.my.com/minigames/bp4/craft/user-craft-info');
+
+            if (data.state === 'Success') {
+                for (const chest of data.data.user_chests) {
+                    //console.log(chest);
+                    if (chest.state === 'new') {
+                        await $.post('https://wf.my.com/minigames/bp4/craft/start', { 'chest_id' : chest.id });
+                        console.info('Started crafting ' + chest.type + ' create with id=' + chest.id);
+                    } else if (chest.state === 'awaiting' && chest.ended_at < 0) {
+                        let openResponse = await $.post('https://wf.my.com/minigames/bp4/craft/open',
+                            { 'chest_id' : chest.id, 'paid': 0 });
+                        // {"state":"Success","data":{"resource":{"level":2,"amount":30}}}
+                        if (openResponse.state = 'Success') {
+                            const reward = openResponse.data.resource;
+                            const msg = 'Crafting: create=' + chest.type + ": reward=" + reward.level + '/' + reward.amount;
+                            permaLog(msg);
+                            if (reward.level >= 4) {
+                                await sendMail('Kiwi Automator: Crating reward', msg);
+                            }
+                        }
+                    }
+                }
+            } else {
+                console.error('Fetched non success data', JSON.stringify(data));
+            }
+        } catch (e) {
+            console.error('Failed to handle crafting creates', e);
         }
     }
 
@@ -259,20 +307,25 @@
         await waitUntil(0, 1000, 120, () => {
             const $reward = $taskWindow.find('.avatar__reward');
             const $closeBtn = $reward.find('.button:contains(\'' + localization.closeButtonText + '\')');
-            if ($closeBtn.length) {
-                const $failed = $reward.find('.failed');
-                const $success = $reward.find('.success');
-                if ($failed.length) {
-                    permaLog('Mission FAILED.', 'color: #7B241C; font-weight: bold;');
-                    return true;
-                } else if ($success.length) {
-                    permaLog('Mission SUCCESS. Reward: '
-                        + $reward.find('.prize_item .name').text()
-                        + ' ' + $reward.find('.prize_item .time').text(), 'color: #196F3D; font-weight: bold;');
-                    return true;
-                }
-            }
+            return !!$closeBtn.length;
         });
+
+        const $reward = $taskWindow.find('.avatar__reward');
+        const $failed = $reward.find('.failed');
+        const $success = $reward.find('.success');
+        if ($failed.length) {
+            permaLog('Mission FAILED.', 'color: #7B241C; font-weight: bold;');
+
+        } else if ($success.length) {
+            const prize = $reward.find('.prize_item .name').text()
+                        + ' ' + $reward.find('.prize_item .time').text();
+            permaLog('Mission SUCCESS. Reward: ' + prize, 'color: #196F3D; font-weight: bold;');
+
+            if (prize.indexOf(localization.permanent) !== -1) {
+                await sendMail('Kiwi: Got reward: ' + prize, prize);
+            }
+
+        }
     }
 
     async function buyEnergy() {
@@ -302,27 +355,23 @@
     }
 
     async function sendToMission() {
-        let stars = null;
-        let mission = autosendToMission.mission;
+        let task = null;
         if (autosendToMission.enabled) {
-            if (currentEnergy() >= starsAttrs[autosendToMission.stars].energyCost) {
-                stars = autosendToMission.stars;
-            } else if (autosendToMission.starsOnLowEnergy > 0
-                && currentEnergy() >= starsAttrs[autosendToMission.starsOnLowEnergy].energyCost) {
-                stars = autosendToMission.starsOnLowEnergy;
-                mission = autosendToMission.missionOnLowEnergy || mission;
+            if (currentEnergy() >= starsAttrs[autosendToMission.task.stars].energyCost) {
+                task = autosendToMission.task;
+            } else if (autosendToMission.lowEnergyTask
+                && currentEnergy() >= starsAttrs[autosendToMission.lowEnergyTask.stars].energyCost) {
+                task = autosendToMission.lowEnergyTask;
             }
         }
-        if (stars === null) {
+        if (task === null) {
             return;
         }
 
-        //console.info('Sending to mission...');
+        await openMissionWindow(task.mission.chain, task.mission.title);
+        await doSendToCurrentMission(task.stars);
 
-        await openMissionWindow(mission.chain, mission.title);
-        await doSendToCurrentMission(stars);
-
-        permaLog('Sent to mission: ' + mission.chain + '/' + mission.title + '/' + stars);
+        permaLog('Sent to mission: ' + task.mission.chain + '/' + task.mission.title + '/' + task.stars);
         // don't continue the chain
         return Promise.reject();
     }
@@ -400,11 +449,47 @@
         return new Promise(res => setTimeout(res, ms));
     }
 
+    /**
+     * Before use, configure and run in the browser console:
+     *
+     * localStorage.setItem('mails.apiKey', 'YOUR API KEY');
+     * localStorage.setItem('mails.from', 'YOUR EMAIL');
+     * localStorage.setItem('mails.to', 'YOUR EMAIL');
+     */
+    async function sendMail(subject, bodyHtml) {
+        const apiKey = localStorage.getItem('mails.apiKey');
+        const from = localStorage.getItem('mails.from');
+        const to = localStorage.getItem('mails.to');
+
+        if (!apiKey || !from || !to) {
+            console.warn('E-Mail sending not configured.');
+            return;
+        }
+
+        let data = await $.post('https://api.elasticemail.com/v2/email/send', {
+            apikey: apiKey,
+            subject: subject,
+            from: from,
+            to: to,
+            bodyHtml: bodyHtml,
+            isTransactional: true
+        });
+
+        if (!data.success) {
+            console.error('Error sending email', JSON.stringify(data));
+        }
+    }
+
+    window.ka_testmail = async function () {
+        return sendMail('test from kiwi', 'test from <b>kiwi</b>');
+    };
+
     window.ka_report = async function (opts) {
+        opts = $.extend({}, { tailSize: 20, since: null, before: null }, opts);
+
         const report = { permanents: [], days: {}, missions: {}, tail: [],
-            summary: { money: 0, permanents: 0 }};
+            summary: { money: 0, runs: 0, permanents: 0 }};
         let mission = null;
-        opts = $.extend({}, opts, { tailSize: 20, since: null, before: null });
 
         await db.permaLog.each(log => {
             //console.info(log.time, log.msg);
@@ -435,7 +520,7 @@
 
                 let numOfPermanents = 0;
                 let reward = msg.substring(msg.indexOf('Reward') + 8);
-                if (reward.indexOf('Permanent') !== -1) {
+                if (reward.indexOf(localization.permanent) !== -1) {
                     numOfPermanents++;
                     report.permanents.push({ day: day, reward: reward });
                 }
@@ -455,6 +540,7 @@
         for (const day in report.days) {
             const dayStats = report.days[day];
             report.summary.money += dayStats.money;
+            report.summary.runs += dayStats.total;
         }
         report.summary.permanents = report.permanents.length;
 
@@ -520,4 +606,4 @@
         return str + " " + (((str.match(/X/g) || []).length) / length).toLocaleString('de', {style: 'percent'});
     }
 
-})(console, window, document, jQuery);
+})(console, window, document, jQuery, localStorage);
