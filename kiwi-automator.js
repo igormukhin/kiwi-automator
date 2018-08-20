@@ -42,7 +42,8 @@
     const companionAttrs = [
         { after_id: 0, attrs: { s: 0, i: 5, d: 1, c: 4, l: 10 } },
         { after_id: 1905, attrs: { s: 0, i: 3, d: 1, c: 6, l: 10 } },
-        { after_id: 4149, attrs: { s: 0, i: 3, d: 1, c: 10, l: 6 } }
+        { after_id: 4149, attrs: { s: 0, i: 3, d: 1, c: 10, l: 6 } },
+        { after_id: 4486, attrs: { s: 0, i: 3, d: 1, c: 10, l: 6 } }
     ];
 
     /**
@@ -95,6 +96,16 @@
             chain: 'volcano',
             title: 'Taupo',
             profile: 's' // strength (rifleman)
+        },
+        shark_Bite: {
+            chain: 'shark',
+            title: 'Bite',
+            profile: 'i' // intellect (engi)
+        },
+        icebreaker_Rift: {
+            chain: 'icebreaker',
+            title: 'Rift',
+            profile: 'd' // dexterity (sniper)
         }
     };
 
@@ -111,20 +122,21 @@
     const autosendToMission = {
         enabled: true,
         task: (function () {
-            if (new Date().getDate() % 2 === 0) {
+            if (new Date().getDate() % 2 === 0
+                    && Math.random() <= 0.5) {
                 return {
-                    mission: missions.pripyat_1986,
+                    mission: missions.shark_Bite,
                     stars: 3
                 }
             } else {
                 return {
-                    mission: missions.volcano_Taupo,
+                    mission: missions.icebreaker_Rift,
                     stars: 1
                 }
             }
         })(),
         lowEnergyTask: {
-            mission: missions.volcano_Taupo,
+            mission: missions.icebreaker_Rift,
             stars: 1
         }
     };
@@ -216,7 +228,7 @@
                         if (openResponse.state = 'Success') {
                             const reward = openResponse.data.resource;
                             const msg = 'Crafting: create=' + chest.type + ": reward=" + reward.level + '/' + reward.amount;
-                            permaLog(msg);
+                            await permaLog(msg);
                             if (reward.level >= 4) {
                                 await sendMail('Kiwi Automator: Crating reward', msg);
                             }
@@ -321,12 +333,12 @@
         const $failed = $reward.find('.failed');
         const $success = $reward.find('.success');
         if ($failed.length) {
-            permaLog('Mission FAILED.', 'color: #7B241C; font-weight: bold;');
+            await permaLog('Mission FAILED.', 'color: #7B241C; font-weight: bold;');
 
         } else if ($success.length) {
             const prize = $reward.find('.prize_item .name').text()
                         + ' ' + $reward.find('.prize_item .time').text();
-            permaLog('Mission SUCCESS. Reward: ' + prize, 'color: #196F3D; font-weight: bold;');
+            await permaLog('Mission SUCCESS. Reward: ' + prize, 'color: #196F3D; font-weight: bold;');
 
             if (prize.indexOf(localization.permanent) !== -1) {
                 await sendMail('Kiwi: Got reward: ' + prize, prize);
@@ -347,7 +359,7 @@
                 // {"state":"Success","data":{"energy":{"from_energy":1,"to_energy":100,"points":1889}}}
 
                 if (data.state === 'Success') {
-                    permaLog('Energy purchased');
+                    await permaLog('Energy purchased');
                     // don't continue the chain
                     return Promise.reject();
                 } else {
@@ -378,7 +390,7 @@
         await openMissionWindow(task.mission.chain, task.mission.title);
         await doSendToCurrentMission(task.stars);
 
-        permaLog('Sent to mission: ' + task.mission.chain + '/' + task.mission.title + '/' + task.stars);
+        await permaLog('Sent to mission: ' + task.mission.chain + '/' + task.mission.title + '/' + task.stars);
         // don't continue the chain
         return Promise.reject();
     }
@@ -429,14 +441,39 @@
         }
     }
 
-    function permaLog(msg, css) {
+    async function permaLog(msg, css) {
         if (css) {
             console.info('%c' + msg, css);
         } else {
             console.info(msg);
         }
 
-        db.permaLog.put({ msg: msg, time: new Date() });
+        await db.permaLog.put({ msg: msg, time: new Date() });
+
+        await publishPermaLogChanges();
+    }
+
+    /**
+     * Use localStorage.getItem('keyvalue.status') to get the report url.
+     */
+    async function publishPermaLogChanges() {
+        try {
+            let statusUrl = localStorage.getItem('keyvalue.status');
+            if (!statusUrl) {
+                statusUrl = (await $.post('https://api.keyvalue.xyz/new/kiwi-status')).trim();
+                localStorage.setItem('keyvalue.status', statusUrl);
+            }
+
+            let report = await collectFastReport();
+            await $.ajax(statusUrl, {
+                'data': JSON.stringify(report),
+                'type': 'POST',
+                'processData': false,
+                'contentType': 'application/json'
+            });
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     async function waitUntil(initialDelay, retryDelay, maxRetries, conditionFunc) {
@@ -490,6 +527,19 @@
     window.ka_testmail = async function () {
         return sendMail('test from kiwi', 'test from <b>kiwi</b>');
     };
+
+    // for testing
+    window.ka_publishPermaLogChanges = publishPermaLogChanges;
+
+    async function collectFastReport() {
+        const report = { tail: [] };
+
+        await db.permaLog.reverse().limit(50).each(log => {
+            report.tail.push(log);
+        });
+
+        return report;
+    }
 
     window.ka_report = async function (opts) {
         opts = $.extend({}, { tailSize: 20, since: null, before: null }, opts);
