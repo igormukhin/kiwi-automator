@@ -141,9 +141,9 @@
         taskSupplier: () => {
             if (currentEnergy() >= starsAttrs[3].energyCost
                 || Math.random() <= 0.5) {
-                return randomOfTwo(threeStarTasks[0], threeStarTasks[1], 0.5);
+                return { mission: randomOfTwo(threeStarTasks[0], threeStarTasks[1], 0.5), stars: 3 };
             } else {
-                return randomOfTwo(oneStarTasks[0], oneStarTasks[1], 0.5);
+                return { mission: randomOfTwo(oneStarTasks[0], oneStarTasks[1], 0.5), stars: 1 };
             }
         }
     };
