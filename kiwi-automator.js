@@ -43,7 +43,7 @@
         { after_id: 0, attrs: { s: 0, i: 5, d: 1, c: 4, l: 10 } },
         { after_id: 1905, attrs: { s: 0, i: 3, d: 1, c: 6, l: 10 } },
         { after_id: 4149, attrs: { s: 0, i: 3, d: 1, c: 10, l: 6 } },
-        { after_id: 4486, attrs: { s: 0, i: 3, d: 1, c: 10, l: 6 } }
+        { after_id: 4486, attrs: { s: 0, i: 7, d: 1, c: 4, l: 8 } }
     ];
 
     /**
@@ -62,19 +62,24 @@
             title: 'Bear',
             profile: 'c' // charisma (med)
         },
+        icebreaker_Rift: {
+            chain: 'icebreaker',
+            title: 'Rift',
+            profile: 'd' // dexterity (sniper)
+        },
         anubis_Sphinx: {
             chain: 'anubis',
             title: 'Sphinx',
             profile: 's' // strength (rifleman)
         },
+        anubis_Oasis: {
+            chain: 'anubis',
+            title: 'Oasis',
+            profile: 'i' // intellect (engi)
+        },
         pripyat_School: {
             chain: 'pripyat',
             title: 'School',
-            profile: 's' // strength (rifleman)
-        },
-        shark_Hammer: {
-            chain: 'shark',
-            title: 'Hammer',
             profile: 's' // strength (rifleman)
         },
         pripyat_Death: {
@@ -82,19 +87,19 @@
             title: 'Death',
             profile: 'd' // dexterity (sniper)
         },
-        pripyat_Wheel: {
-            chain: 'pripyat',
-            title: 'Wheel',
-            profile: 'i' // intellect (engi)
-        },
         pripyat_1986: {
             chain: 'pripyat',
             title: '1986',
             profile: 'c' // charisma (med)
         },
-        volcano_Taupo: {
-            chain: 'volcano',
-            title: 'Taupo',
+        pripyat_Wheel: {
+            chain: 'pripyat',
+            title: 'Wheel',
+            profile: 'i' // intellect (engi)
+        },
+        shark_Hammer: {
+            chain: 'shark',
+            title: 'Hammer',
             profile: 's' // strength (rifleman)
         },
         shark_Bite: {
@@ -102,10 +107,15 @@
             title: 'Bite',
             profile: 'i' // intellect (engi)
         },
-        icebreaker_Rift: {
-            chain: 'icebreaker',
-            title: 'Rift',
-            profile: 'd' // dexterity (sniper)
+        volcano_Taupo: {
+            chain: 'volcano',
+            title: 'Taupo',
+            profile: 's' // strength (rifleman)
+        },
+        volcano_Ararat: {
+            chain: 'volcano',
+            title: 'Ararat',
+            profile: 'i' // intellect (engi)
         }
     };
 
@@ -119,25 +129,22 @@
       характеристика увеличивает шанс на получение предмета навсегда.
      */
 
+    const threeStarTasks = [missions.volcano_Ararat, missions.anubis_Oasis];
+    const oneStarTasks = [missions.icebreaker_Rift, missions.shark_Hammer];
+
+    function randomOfTwo(first, second, chanceOfFirst) {
+        return Math.random() <= chanceOfFirst ? first : second;
+    }
+
     const autosendToMission = {
         enabled: true,
-        task: (function () {
-            if (new Date().getDate() % 2 === 0
-                    && Math.random() <= 0.5) {
-                return {
-                    mission: missions.shark_Bite,
-                    stars: 3
-                }
+        taskSupplier: () => {
+            if (currentEnergy() >= starsAttrs[3].energyCost
+                || Math.random() <= 0.5) {
+                return randomOfTwo(threeStarTasks[0], threeStarTasks[1], 0.5);
             } else {
-                return {
-                    mission: missions.icebreaker_Rift,
-                    stars: 1
-                }
+                return randomOfTwo(oneStarTasks[0], oneStarTasks[1], 0.5);
             }
-        })(),
-        lowEnergyTask: {
-            mission: missions.icebreaker_Rift,
-            stars: 1
         }
     };
 
@@ -227,7 +234,7 @@
                         // {"state":"Success","data":{"resource":{"level":2,"amount":30}}}
                         if (openResponse.state = 'Success') {
                             const reward = openResponse.data.resource;
-                            const msg = 'Crafting: create=' + chest.type + ": reward=" + reward.level + '/' + reward.amount;
+                            const msg = 'Crafting: crate=' + chest.type + ": reward=" + reward.level + '/' + reward.amount;
                             await permaLog(msg);
                             if (reward.level >= 4) {
                                 await sendMail('Kiwi Automator: Crating reward', msg);
@@ -376,12 +383,7 @@
     async function sendToMission() {
         let task = null;
         if (autosendToMission.enabled) {
-            if (currentEnergy() >= starsAttrs[autosendToMission.task.stars].energyCost) {
-                task = autosendToMission.task;
-            } else if (autosendToMission.lowEnergyTask
-                && currentEnergy() >= starsAttrs[autosendToMission.lowEnergyTask.stars].energyCost) {
-                task = autosendToMission.lowEnergyTask;
-            }
+            task = autosendToMission.taskSupplier();
         }
         if (task === null) {
             return;
@@ -541,6 +543,41 @@
         return report;
     }
 
+    const CHAINS = ['pripyat', 'shark', 'icebreaker', 'volcano', 'anubis'];
+
+    window.ka_completions = async function () {
+        const missions = [];
+        for (const chain of CHAINS) {
+            let response = await $.get('https://wf.my.com/minigames/bp4/info/tasks?chain=' + chain);
+
+            for (const col_id in response.data.tasks) {
+                let col = response.data.tasks[col_id];
+                for (let mission_id in col) {
+                    let mission = col[mission_id];
+                    if (mission.type === 'avatar') {
+                        mission.chain = chain;
+                        missions.push(mission);
+                    }
+                }
+            }
+        }
+
+        missions.sort((a, b) => a.tasks_completed - b.tasks_completed);
+
+        const report = [];
+        for (const mission of missions) {
+            report.push({
+                chain: mission.chain,
+                title: mission.title,
+                kind: mission.kind,
+                completed: mission.tasks_completed
+            });
+        }
+
+        console.info(report);
+        return report;
+    };
+
     window.ka_report = async function (opts) {
         opts = $.extend({}, { tailSize: 20, since: null, before: null }, opts);
 
@@ -635,9 +672,9 @@
         return report;
     };
 
-    window.ka_deleteLogs = async function (fromId, toId, msgFilterTODO) {
+    window.ka_deleteLogs = async function (fromId, toId) {
         if (!fromId) {
-            throw new Error('Error: syntax window.ka_deleteLogs(fromId [, toId][, msgFilter])');
+            throw new Error('Error: syntax window.ka_deleteLogs(fromId [, toId])');
         }
         toId = toId || fromId;
 
@@ -646,9 +683,6 @@
         }
 
         let statement = db.permaLog.where('id').between(fromId, toId, true, true);
-        //if (msgFilter) {
-        //    statement = statement.equalsIgnoreCase()
-        //}
         await statement.delete();
 
         return 'Deletion completed';
