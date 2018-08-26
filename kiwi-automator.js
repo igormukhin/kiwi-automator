@@ -52,6 +52,11 @@
      * Rifleman: pripyat/School, anubis/Sphinx
      */
     const missions = {
+        icebreaker_North: {
+            chain: 'icebreaker',
+            title: 'North',
+            profile: 's' // strength (rifleman)
+        },
         icebreaker_Water: {
             chain: 'icebreaker',
             title: 'Water',
@@ -102,6 +107,11 @@
             title: 'Hammer',
             profile: 's' // strength (rifleman)
         },
+        shark_Meat: {
+            chain: 'shark',
+            title: 'Meat',
+            profile: 'd' // dexterity (sniper)
+        },
         shark_Bite: {
             chain: 'shark',
             title: 'Bite',
@@ -127,23 +137,27 @@
       При профильной шестерке было 55%.
     - Пока единственный предмет навсегда выпал на профильной шестерке. Вероятно профильная
       характеристика увеличивает шанс на получение предмета навсегда.
+
+      - Number of stars does not affect success rate [SR] (SR of 1-star mission is the same as for 3-star mission)
+      - To achieve the best SR you need low mission attribute (for rifleman missions you need strength <= 2).
+          But that decreases chances for permanent rewards.
+      - To get more permanent rewards you need a high mission attribute (for rifleman missions you need strength >= 7)
+          But that decreases success rate.
+      - Chances of getting permanent reward from 1-star mission are very low (approx. 1 in 1000)
+      -
      */
 
-    const threeStarTasks = [missions.volcano_Ararat, missions.anubis_Oasis];
-    const oneStarTasks = [missions.icebreaker_Rift, missions.shark_Hammer];
-
-    function randomOfTwo(first, second, chanceOfFirst) {
-        return Math.random() <= chanceOfFirst ? first : second;
-    }
+    const threeStarTasks = [ missions.volcano_Ararat, missions.anubis_Oasis, missions.shark_Bite, missions.pripyat_Wheel ];
+    const oneStarTasks = [ missions.shark_Hammer, missions.icebreaker_North, missions.pripyat_School, missions.anubis_Sphinx ];
 
     const autosendToMission = {
         enabled: true,
         taskSupplier: () => {
-            if (currentEnergy() >= starsAttrs[3].energyCost
-                || Math.random() <= 0.5) {
-                return { mission: randomOfTwo(threeStarTasks[0], threeStarTasks[1], 0.5), stars: 3 };
+            if (currentEnergy() < starsAttrs[3].energyCost
+                    || Math.random() <= 0.5) {
+                return { mission: randomItem(oneStarTasks), stars: 1 };
             } else {
-                return { mission: randomOfTwo(oneStarTasks[0], oneStarTasks[1], 0.5), stars: 1 };
+                return { mission: randomItem(threeStarTasks), stars: 3 };
             }
         }
     };
@@ -579,7 +593,7 @@
     };
 
     window.ka_report = async function (opts) {
-        opts = $.extend({}, { tailSize: 20, since: null, before: null }, opts);
+        opts = $.extend({}, { tailSize: 20, since: null, before: null, stars: null }, opts);
 
         const report = { permanents: [], days: {}, missions: {}, tail: [],
             summary: { money: 0, runs: 0, permanents: 0 }};
@@ -607,28 +621,32 @@
             } else if (msg.indexOf('Sent to mission: ') === 0) {
                 mission = msg.substring('Sent to mission: '.length);
 
-            } else if (msg.indexOf('SUCCESS') !== -1) {
-                dayStats.won++;
-                dayStats.money += successMoneyReward;
-                dayStatsUpdated(dayStats);
+            } else if (msg.indexOf('SUCCESS') !== -1 || msg.indexOf('FAILED') !== -1) {
+                const missionStars = extractStarsFromMissionName(mission);
+                if (opts.stars && opts.stars !== missionStars) {
+                    // ignore
+                } else if (msg.indexOf('SUCCESS') !== -1) {
+                    dayStats.won++;
+                    dayStats.money += successMoneyReward;
+                    dayStatsUpdated(dayStats);
 
-                let numOfPermanents = 0;
-                let reward = msg.substring(msg.indexOf('Reward') + 8);
-                if (reward.indexOf(localization.permanent) !== -1) {
-                    numOfPermanents++;
-                    report.permanents.push({ day: day, reward: reward });
+                    let numOfPermanents = 0;
+                    let reward = msg.substring(msg.indexOf('Reward') + 8);
+                    if (reward.indexOf(localization.permanent) !== -1) {
+                        numOfPermanents++;
+                        report.permanents.push({day: day, reward: reward, mission: mission});
+                    }
+
+                    updateMissionStats(1, numOfPermanents);
+                    updateTail(log.time, mission, 'SUCCESS', reward);
+
+                } else if (msg.indexOf('FAILED') !== -1) {
+                    dayStats.lost++;
+                    dayStatsUpdated(dayStats);
+                    updateMissionStats(0, 0);
+                    updateTail(log.time, mission, 'FAILED', null);
                 }
-
-                updateMissionStats(1, numOfPermanents);
-                updateTail(log.time, mission, 'SUCCESS', reward);
-
-            } else if (msg.indexOf('FAILED') !== -1) {
-                dayStats.lost++;
-                dayStatsUpdated(dayStats);
-                updateMissionStats(0, 0);
-                updateTail(log.time, mission, 'FAILED', null);
             }
-
         });
 
         for (const day in report.days) {
@@ -672,6 +690,14 @@
         return report;
     };
 
+    function extractStarsFromMissionName(name) {
+        if (!name) {
+            return null;
+        }
+
+        return parseInt(name.substring(name.indexOf('/', name.indexOf('/') + 1) + 1));
+    }
+
     window.ka_deleteLogs = async function (fromId, toId) {
         if (!fromId) {
             throw new Error('Error: syntax window.ka_deleteLogs(fromId [, toId])');
@@ -695,6 +721,57 @@
             str += (Math.random() <= chanceN ? 'X' : '-');
         }
         return str + " " + (((str.match(/X/g) || []).length) / length).toLocaleString('de', {style: 'percent'});
+    };
+
+    function randomItem(items) {
+        return items[Math.floor(Math.random() * items.length)];
     }
+
+    /**
+     * Simulates weapon crafting.
+     */
+    window.ka_crafting = function(platinumChance, slots, level5inPlatinumChance, daysToCraft, totalPlayers) {
+        platinumChance = platinumChance || (1/8);
+        slots = slots || 8;
+        level5inPlatinumChance = level5inPlatinumChance || (1/50);
+        daysToCraft = daysToCraft || 180;
+        totalPlayers = totalPlayers || 10000;
+        const winNumber = 5;
+
+        function tryCraftingIn(maxDays) {
+            let wins = 0;
+            let day = 1;
+            for (; day <= maxDays; day++) {
+                let cases = 0;
+                for (let slot = 0; slot < slots; slot++) {
+                    if (Math.random() < platinumChance) {
+                        cases++;
+                    }
+                }
+                for (let pcase = 0; pcase < cases; pcase++) {
+                    if (Math.random() < level5inPlatinumChance) {
+                        wins++;
+                        if (wins >= winNumber) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        let craftedPlayers = 0;
+        for (let player = 0; player < totalPlayers; player++) {
+            if (tryCraftingIn(daysToCraft)) {
+                craftedPlayers++;
+            }
+            if (player % 1000 === 0) {
+                console.info('Calculated for', player, 'players');
+            }
+        }
+
+        console.log('Weapons were crafted by', craftedPlayers, 'players from', totalPlayers,
+            '(', (craftedPlayers / totalPlayers).toLocaleString('de', {style: 'percent'}), ')');
+    };
 
 })(console, window, document, jQuery, localStorage);
