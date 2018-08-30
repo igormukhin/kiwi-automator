@@ -5,7 +5,7 @@
 // @description  Automatically sends Warface KIWI Companion to missions, buys energy if needed. Configure before use!
 // @author       Igor Mukhin
 // @match        https://wf.my.com/kiwi
-// @require      http://code.jquery.com/jquery-3.3.1.min.js
+// @require      https://code.jquery.com/jquery-3.3.1.min.js
 // @require      https://unpkg.com/dexie@latest/dist/dexie.js
 // -require      file:///D:/igor.mukhin/projects-jetbrain/kiwi-automator/kiwi-automator.js
 // @grant        none
@@ -39,7 +39,7 @@
     // TODO: this data should be in the personal database.
     // The program should read the current state of attributes and save it to the database.
     // The data will be used for reporting.
-    const companionAttrs = [
+    const myCompanionAttrs = [
         { after_id: 0, attrs: { s: 0, i: 5, d: 1, c: 4, l: 10 } },
         { after_id: 1905, attrs: { s: 0, i: 3, d: 1, c: 6, l: 10 } },
         { after_id: 4149, attrs: { s: 0, i: 3, d: 1, c: 10, l: 6 } },
@@ -148,16 +148,20 @@
      */
 
     const threeStarTasks = [ missions.volcano_Ararat, missions.anubis_Oasis, missions.shark_Bite, missions.pripyat_Wheel ];
-    const oneStarTasks = [ missions.shark_Hammer, missions.icebreaker_North, missions.pripyat_School, missions.anubis_Sphinx ];
+    const oneStarTasks = [ missions.shark_Hammer /*, missions.icebreaker_North, missions.pripyat_School, missions.anubis_Sphinx */ ];
+    const threeStarRate = 0; // 0..1
+
+    function isEnoughEnergyForStars(stars) {
+        return currentEnergy() >= starsAttrs[stars].energyCost;
+    }
 
     const autosendToMission = {
         enabled: true,
         taskSupplier: () => {
-            if (currentEnergy() < starsAttrs[3].energyCost
-                    || Math.random() <= 0.5) {
-                return { mission: randomItem(oneStarTasks), stars: 1 };
-            } else {
+            if (isEnoughEnergyForStars(3) && Math.random() < threeStarRate) {
                 return { mission: randomItem(threeStarTasks), stars: 3 };
+            } else {
+                return { mission: randomItem(oneStarTasks), stars: 1 };
             }
         }
     };
@@ -166,6 +170,10 @@
         enabled: true,
         buyIfEnergyLessThen: 3,
         buyIfMoneyMoreThen: 100
+    };
+
+    const autoCrafting = {
+        enabled: true
     };
 
     let kiwiState = null;
@@ -225,6 +233,10 @@
     }
 
     async function handleCraftingCrates() {
+        if (!autoCrafting.enabled) {
+            return;
+        }
+
         const lastTime = parseInt(localStorage.getItem('crafting.last'));
         if (lastTime && lastTime + 15 * 60 * 1000 > new Date().getTime()) {
             return;
@@ -470,23 +482,32 @@
     }
 
     /**
-     * Use localStorage.getItem('keyvalue.status') to get the report url.
+     * Use localStorage.getItem('jsbin.ID') to get the report url.
      */
+    const jsbinIdLSName = 'jsbin.ID';
     async function publishPermaLogChanges() {
         try {
-            let statusUrl = localStorage.getItem('keyvalue.status');
-            if (!statusUrl) {
-                statusUrl = (await $.post('https://api.keyvalue.xyz/new/kiwi-status')).trim();
-                localStorage.setItem('keyvalue.status', statusUrl);
+            let report = await collectFastReport();
+
+            let id = localStorage.getItem(jsbinIdLSName);
+            if (!id) {
+                id = (await $.ajax('https://api.jsonbin.io/b', {
+                    'data': JSON.stringify(report),
+                    'type': 'POST',
+                    'processData': false,
+                    'contentType': 'application/json'
+                })).id;
+                localStorage.setItem(jsbinIdLSName, id);
+
+            } else {
+                await $.ajax('https://api.jsonbin.io/b/' + id, {
+                    'data': JSON.stringify(report),
+                    'type': 'PUT',
+                    'processData': false,
+                    'contentType': 'application/json'
+                });
             }
 
-            let report = await collectFastReport();
-            await $.ajax(statusUrl, {
-                'data': JSON.stringify(report),
-                'type': 'POST',
-                'processData': false,
-                'contentType': 'application/json'
-            });
         } catch (e) {
             console.error(e);
         }
@@ -596,7 +617,7 @@
         opts = $.extend({}, { tailSize: 20, since: null, before: null, stars: null }, opts);
 
         const report = { permanents: [], days: {}, missions: {}, tail: [],
-            summary: { money: 0, runs: 0, permanents: 0 }};
+            summary: { money: 0, runs: 0, wins: 0, permanents: 0 }};
         let mission = null;
 
         await db.permaLog.each(log => {
@@ -653,6 +674,7 @@
             const dayStats = report.days[day];
             report.summary.money += dayStats.money;
             report.summary.runs += dayStats.total;
+            report.summary.wins += dayStats.won;
         }
         report.summary.permanents = report.permanents.length;
 
