@@ -16,7 +16,7 @@
 
     const waitBeforeStartMillis = 1000;
 
-    let refreshDelayMillis = 5 * 1000;
+    let refreshDelayMillis = 1000;
     const fastRefreshDelayMillis = 100;
     const slowRefreshDelayMillis = 600 * 1000;
 
@@ -173,7 +173,9 @@
     };
 
     const autoCrafting = {
-        enabled: true
+        enabled: true, /* will enable the feature that opens crates and claims their contents */
+        openCrates: false, /* will open (start) crates. Deactivate if you wish to upgrade crates. */
+        checkEveryMins: 5 /* minutes between checks */
     };
 
     let kiwiState = null;
@@ -238,7 +240,7 @@
         }
 
         const lastTime = parseInt(localStorage.getItem('crafting.last'));
-        if (lastTime && lastTime + 15 * 60 * 1000 > new Date().getTime()) {
+        if (lastTime && (lastTime + (autoCrafting.checkEveryMins * 60 * 1000)) > new Date().getTime()) {
             return;
         }
         localStorage.setItem('crafting.last', new Date().getTime().toString());
@@ -250,7 +252,10 @@
 
             if (data.state === 'Success') {
                 for (const chest of data.data.user_chests) {
-                    if (chest.state === 'new') {
+                    if (chest.state === 'new' && autoCrafting.openCrates) {
+                        // POST https://wf.my.com/minigames/bp4/craft/upgrade ? chest_id: 4010697
+                        // {"state":"Success","data":{"is_success":false}}
+
                         await $.post('https://wf.my.com/minigames/bp4/craft/start', { 'chest_id' : chest.id });
                         console.info('%cStarted crafting ' + chest.type + ' create',
                             'color: lightblue; font-weight: bold');
@@ -720,6 +725,37 @@
         return parseInt(name.substring(name.indexOf('/', name.indexOf('/') + 1) + 1));
     }
 
+
+    window.ka_crafting_report = async function () {
+        const report = { };
+
+        await db.permaLog.each(log => {
+            //console.info(log.time, log.msg);
+            const msg = log.msg;
+
+            if (msg.indexOf('Crafting:') !== 0) {
+                return;
+            }
+
+            const result = extractCraftingResult(msg);
+            report[result.type] = report[result.type] || { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+            report[result.type]['' + result.level]++;
+        });
+
+        function extractCraftingResult(msg) {
+            // Crafting: crate=silver: reward=2/25
+            const firstEqual = msg.indexOf('=');
+            const type = msg.substring(firstEqual + 1, msg.indexOf(':', firstEqual));
+            const slashPos = msg.indexOf('/');
+            const level = parseInt(msg.substring(msg.indexOf('=', firstEqual + 1) + 1, slashPos));
+            const amount = parseInt(msg.substring(slashPos + 1));
+            return { type: type, level: level, amount: amount };
+        }
+
+        console.info('Report:', report);
+        return report;
+    };
+
     window.ka_deleteLogs = async function (fromId, toId) {
         if (!fromId) {
             throw new Error('Error: syntax window.ka_deleteLogs(fromId [, toId])');
@@ -752,13 +788,13 @@
     /**
      * Simulates weapon crafting.
      */
-    window.ka_crafting = function(platinumChance, slots, level5inPlatinumChance, daysToCraft, totalPlayers) {
-        platinumChance = platinumChance || (1/8);
+    window.ka_crafting = function(platinumChance, slots, level5inPlatinumChance, daysToCraft, totalPlayers, winNumber) {
+        platinumChance = platinumChance || (1/13);
         slots = slots || 8;
         level5inPlatinumChance = level5inPlatinumChance || (1/50);
         daysToCraft = daysToCraft || 180;
         totalPlayers = totalPlayers || 10000;
-        const winNumber = 5;
+        winNumber = winNumber || 5;
 
         function tryCraftingIn(maxDays) {
             let wins = 0;
@@ -773,18 +809,18 @@
                 for (let pcase = 0; pcase < cases; pcase++) {
                     if (Math.random() < level5inPlatinumChance) {
                         wins++;
-                        if (wins >= winNumber) {
-                            return true;
-                        }
                     }
                 }
             }
-            return false;
+            return wins;
         }
 
         let craftedPlayers = 0;
+        let totalWins = 0;
         for (let player = 0; player < totalPlayers; player++) {
-            if (tryCraftingIn(daysToCraft)) {
+            const wins = tryCraftingIn(daysToCraft);
+            totalWins += wins;
+            if (wins >= winNumber) {
                 craftedPlayers++;
             }
             if (player % 1000 === 0) {
@@ -793,7 +829,8 @@
         }
 
         console.log('Weapons were crafted by', craftedPlayers, 'players from', totalPlayers,
-            '(', (craftedPlayers / totalPlayers).toLocaleString('de', {style: 'percent'}), ')');
+            '(', (craftedPlayers / totalPlayers).toLocaleString('de', {style: 'percent'}), ')',
+            'Average wins:', (totalWins / totalPlayers));
     };
 
 })(console, window, document, jQuery, localStorage);
