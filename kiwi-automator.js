@@ -5,6 +5,7 @@
 // @description  Automatically sends Warface KIWI Companion to missions, buys energy if needed. Configure before use!
 // @author       Igor Mukhin
 // @match        https://wf.my.com/kiwi
+// @match        https://wf.my.com/create
 // @require      https://code.jquery.com/jquery-3.3.1.min.js
 // @require      https://unpkg.com/dexie@latest/dist/dexie.js
 // -require      file:///D:/igor.mukhin/projects-jetbrain/kiwi-automator/kiwi-automator.js
@@ -18,7 +19,7 @@
 
     let refreshDelayMillis = 1000;
     const fastRefreshDelayMillis = 100;
-    const slowRefreshDelayMillis = 600 * 1000;
+    const slowRefreshDelayMillis = 10 * 60 * 1000; // 15 mins
 
     // IMPORTANT: Edit here for your language
     const localization = {
@@ -156,7 +157,7 @@
     }
 
     const autosendToMission = {
-        enabled: true,
+        enabled: false,
         taskSupplier: () => {
             if (isEnoughEnergyForStars(3) && Math.random() < threeStarRate) {
                 return { mission: randomItem(threeStarTasks), stars: 3 };
@@ -167,15 +168,15 @@
     };
 
     const autobuyEnergy = {
-        enabled: true,
+        enabled: false,
         buyIfEnergyLessThen: 3,
-        buyIfMoneyMoreThen: 100
+        buyIfMoneyMoreThen: 50
     };
 
     const autoCrafting = {
         enabled: true, /* will enable the feature that opens crates and claims their contents */
-        openCrates: false, /* will open (start) crates. Deactivate if you wish to upgrade crates. */
-        checkEveryMins: 5 /* minutes between checks */
+        openCrates: true, /* will open (start) crates. Deactivate if you wish to upgrade crates. */
+        checkEveryMins: 15 /* minutes between checks */
     };
 
     let kiwiState = null;
@@ -192,11 +193,13 @@
 
         // start operations
         try {
-            await fetchState();
             await handleCraftingCrates();
-            await waitForMissionResults();
-            await buyEnergy();
-            await sendToMission();
+
+            //await fetchState();
+            //await waitForMissionResults();
+            //await buyEnergy();
+            //await sendToMission();
+
             nothingToDo();
         } catch (e) {
             if (e && e.message) {
@@ -247,6 +250,7 @@
 
         console.log('Handling crafting creates...');
 
+        let domeSomething = false;
         try {
             let data = await $.get('https://wf.my.com/minigames/bp4/craft/user-craft-info');
 
@@ -257,6 +261,7 @@
                         // {"state":"Success","data":{"is_success":false}}
 
                         await $.post('https://wf.my.com/minigames/bp4/craft/start', { 'chest_id' : chest.id });
+                        domeSomething = true;
                         console.info('%cStarted crafting ' + chest.type + ' create',
                             'color: lightblue; font-weight: bold');
                     } else if (chest.state === 'awaiting' && chest.ended_at < 0) {
@@ -266,6 +271,7 @@
                         if (openResponse.state = 'Success') {
                             const reward = openResponse.data.resource;
                             const msg = 'Crafting: crate=' + chest.type + ": reward=" + reward.level + '/' + reward.amount;
+                            domeSomething = true;
                             await permaLog(msg);
                             if (reward.level >= 4) {
                                 await sendMail('Kiwi Automator: Crating reward', msg);
@@ -278,6 +284,11 @@
             }
         } catch (e) {
             console.error('Failed to handle crafting creates', e);
+        }
+
+        if (domeSomething) {
+            // don't continue the chain
+            return Promise.reject();
         }
     }
 
