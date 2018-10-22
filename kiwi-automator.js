@@ -15,7 +15,7 @@
 (function(console, window, document, $, localStorage) {
     'use strict';
 
-    const waitBeforeStartMillis = 1000;
+    const waitBeforeStartMillis = 1500;
 
     let refreshDelayMillis = 1000;
     const fastRefreshDelayMillis = 100;
@@ -176,7 +176,7 @@
     const autoCrafting = {
         enabled: true, /* will enable the feature that opens crates and claims their contents */
         openCrates: true, /* will open (start) crates. Deactivate if you wish to upgrade crates. */
-        checkEveryMins: 15 /* minutes between checks */
+        checkEveryMins: 0 /* minutes between checks */
     };
 
     let kiwiState = null;
@@ -250,21 +250,35 @@
 
         console.log('Handling crafting creates...');
 
+        let mgTokenSet = false;
+        async function renewMgToken() {
+            if (!mgTokenSet) {
+                const user = await $.get('https://wf.my.com/minigames/user/info');
+                if (user.state === 'Success') {
+                    const mgToken = user.data.token;
+                    // I don't know where setCookie comes from
+                    setCookie('mg_token', mgToken);
+                } else {
+                    console.error('Fetched non success data', JSON.stringify(user));
+                }
+                mgTokenSet = true;
+            }
+        }
+
         let domeSomething = false;
         try {
-            let data = await $.get('https://wf.my.com/minigames/bp4/craft/user-craft-info');
-
+            const data = await $.get('https://wf.my.com/minigames/bp4/craft/user-craft-info');
             if (data.state === 'Success') {
                 for (const chest of data.data.user_chests) {
                     if (chest.state === 'new' && autoCrafting.openCrates) {
-                        // POST https://wf.my.com/minigames/bp4/craft/upgrade ? chest_id: 4010697
-                        // {"state":"Success","data":{"is_success":false}}
-
+                        renewMgToken();
                         await $.post('https://wf.my.com/minigames/bp4/craft/start', { 'chest_id' : chest.id });
                         domeSomething = true;
                         console.info('%cStarted crafting ' + chest.type + ' create',
                             'color: lightblue; font-weight: bold');
+
                     } else if (chest.state === 'awaiting' && chest.ended_at < 0) {
+                        renewMgToken();
                         let openResponse = await $.post('https://wf.my.com/minigames/bp4/craft/open',
                             { 'chest_id' : chest.id, 'paid': 0 });
                         // {"state":"Success","data":{"resource":{"level":2,"amount":30}}}
