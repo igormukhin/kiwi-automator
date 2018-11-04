@@ -19,7 +19,7 @@
 
     let refreshDelayMillis = 1000;
     const fastRefreshDelayMillis = 100;
-    const slowRefreshDelayMillis = 10 * 60 * 1000; // 15 mins
+    const slowRefreshDelayMillis = 10 * 60 * 1000;
 
     // IMPORTANT: Edit here for your language
     const localization = {
@@ -271,18 +271,18 @@
             if (data.state === 'Success') {
                 for (const chest of data.data.user_chests) {
                     if (chest.state === 'new' && autoCrafting.openCrates) {
-                        renewMgToken();
+                        await renewMgToken();
                         await $.post('https://wf.my.com/minigames/bp4/craft/start', { 'chest_id' : chest.id });
                         domeSomething = true;
                         console.info('%cStarted crafting ' + chest.type + ' create',
                             'color: lightblue; font-weight: bold');
 
                     } else if (chest.state === 'awaiting' && chest.ended_at < 0) {
-                        renewMgToken();
+                        await renewMgToken();
                         let openResponse = await $.post('https://wf.my.com/minigames/bp4/craft/open',
                             { 'chest_id' : chest.id, 'paid': 0 });
                         // {"state":"Success","data":{"resource":{"level":2,"amount":30}}}
-                        if (openResponse.state = 'Success') {
+                        if (openResponse.state === 'Success') {
                             const reward = openResponse.data.resource;
                             const msg = 'Crafting: crate=' + chest.type + ": reward=" + reward.level + '/' + reward.amount;
                             domeSomething = true;
@@ -475,7 +475,7 @@
     }
 
     function nothingToDo() {
-        console.info('KiwiAutomator has nothing to do. May be not enough energy or money...');
+        console.info('KiwiAutomator has nothing to do.');
         setupSlowRefresh();
     }
 
