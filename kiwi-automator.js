@@ -6,6 +6,7 @@
 // @author       Igor Mukhin
 // @match        https://wf.my.com/kiwi
 // @match        https://wf.my.com/create
+// @match        https://wf.my.com/en/create/
 // @require      https://code.jquery.com/jquery-3.3.1.min.js
 // @require      https://unpkg.com/dexie@latest/dist/dexie.js
 // -require      file:///D:/igor.mukhin/projects-jetbrain/kiwi-automator/kiwi-automator.js
@@ -256,8 +257,7 @@
                 const user = await $.get('https://wf.my.com/minigames/user/info');
                 if (user.state === 'Success') {
                     const mgToken = user.data.token;
-                    // I don't know where setCookie comes from
-                    setCookie('mg_token', mgToken);
+                    document.cookie = 'mg_token=' + mgToken + '; path=/';
                 } else {
                     console.error('Fetched non success data', JSON.stringify(user));
                 }
