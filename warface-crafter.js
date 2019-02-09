@@ -157,8 +157,6 @@
         }
 
         await db.permaLog.put({ msg: msg, time: new Date() });
-
-        await publishPermaLogChanges();
     }
 
     // noinspection JSUnusedLocalSymbols
@@ -237,9 +235,9 @@
 
         CRATE_TYPES.forEach(function (type, index) {
             const rate = report.totalByType[index] / report.total;
-            const rate3 = (report.byType[type] || { 3: 0 })[3] / report.totalByType[index];
-            const rate4 = (report.byType[type] || { 4: 0 })[4] / report.totalByType[index];
-            const rate5 = (report.byType[type] || { 5: 0 })[5] / report.totalByType[index];
+            const rate3 = (report.byType[type] || { 3: { times: 0 } })[3].times / report.totalByType[index];
+            const rate4 = (report.byType[type] || { 4: { times: 0 } })[4].times / report.totalByType[index];
+            const rate5 = (report.byType[type] || { 5: { times: 0 } })[5].times / report.totalByType[index];
             report.frequencyByType[index] =
                 rate.toLocaleString('de', {style: 'percent'})
                 + " III=" + rate3.toLocaleString('de', {style: 'percent'})
@@ -272,8 +270,17 @@
         }
 
         function updateByType(result) {
-            report.byType[result.type] = report.byType[result.type] || { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
-            report.byType[result.type]['' + result.level]++;
+            report.byType[result.type] = report.byType[result.type] ||
+                { 1: { times: 0, r_min: null, r_max: null, r_sum: 0 },
+                  2: { times: 0, r_min: null, r_max: null, r_sum: 0 },
+                  3: { times: 0, r_min: null, r_max: null, r_sum: 0 },
+                  4: { times: 0, r_min: null, r_max: null, r_sum: 0 },
+                  5: { times: 0, r_min: null, r_max: null, r_sum: 0 } };
+            const data = report.byType[result.type][result.level];
+            data.times++;
+            data.r_sum += result.amount;
+            data.r_min = data.r_min == null ? result.amount : Math.min(result.amount, data.r_min);
+            data.r_max = data.r_max == null ? result.amount : Math.max(result.amount, data.r_max);
         }
 
         console.info('Report:', report);
