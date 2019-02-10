@@ -238,7 +238,7 @@
             const rate3 = (report.byType[type] || { 3: { times: 0 } })[3].times / report.totalByType[index];
             const rate4 = (report.byType[type] || { 4: { times: 0 } })[4].times / report.totalByType[index];
             const rate5 = (report.byType[type] || { 5: { times: 0 } })[5].times / report.totalByType[index];
-            report.frequencyByType[index] =
+            report.frequencyByType[type] =
                 rate.toLocaleString('de', {style: 'percent'})
                 + " III=" + rate3.toLocaleString('de', {style: 'percent'})
                 + " IV=" + rate4.toLocaleString('de', {style: 'percent'})
