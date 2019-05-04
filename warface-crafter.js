@@ -20,9 +20,16 @@
     const fastRefreshDelayMillis = 100;
     const slowRefreshDelayMillis = 10 * 60 * 1000;
 
+    const CRATE_TYPE_COMMON = 'common';
+    const CRATE_TYPE_SILVER = 'silver';
+    const CRATE_TYPE_GOLD = 'gold';
+    const CRATE_TYPE_PLATINUM = 'platinum';
+    const CRATE_TYPES = [CRATE_TYPE_COMMON, CRATE_TYPE_SILVER, CRATE_TYPE_GOLD, CRATE_TYPE_PLATINUM];
+
     const autoCrafting = {
         enabled: true, /* will enable the feature that opens crates and claims their contents */
         openCrates: true, /* will open (start) crates. Deactivate if you wish to upgrade crates. */
+        openCratesTypes: [ CRATE_TYPE_COMMON, CRATE_TYPE_SILVER, CRATE_TYPE_GOLD, CRATE_TYPE_PLATINUM ], /* which types of creates should start automatically. */
         checkEveryMins: 0 /* minutes between checks */
     };
 
@@ -89,11 +96,16 @@
             if (data.state === 'Success') {
                 for (const chest of data.data.user_chests) {
                     if (chest.state === 'new' && autoCrafting.openCrates) {
-                        await renewMgToken();
-                        await $.post('https://wf.my.com/minigames/minigames/craft/api/start', { 'chest_id' : chest.id });
-                        domeSomething = true;
-                        console.info('%cStarted crafting ' + chest.type + ' create',
-                            'color: lightblue; font-weight: bold');
+
+                        if (autoCrafting.openCratesTypes == null
+                                || autoCrafting.openCratesTypes.indexOf(chest.type) !== -1) {
+                            await renewMgToken();
+                            await $.post('https://wf.my.com/minigames/minigames/craft/api/start', { 'chest_id' : chest.id });
+                            domeSomething = true;
+                            console.info('%cStarted crafting ' + chest.type + ' create',
+                                'color: lightblue; font-weight: bold');
+                        }
+
 
                     } else if (chest.state === 'awaiting' && chest.ended_at < 0) {
                         await renewMgToken();
@@ -199,8 +211,6 @@
         return sendMail('test from email crafter', 'test email from <b>crafter</b>');
     };
 
-    const CRATE_TYPES = ['common', 'silver', 'gold', 'platinum'];
-
     function getCrateTypeIndex(createTypeName) {
         return CRATE_TYPES.indexOf(createTypeName);
     }
@@ -208,7 +218,7 @@
     window.wf_report = async function (opts) {
         opts = $.extend({}, { tailSize: 20, since: null, before: null }, opts);
 
-        const report = { tail: [], byType: {}, total: 0, totalByType: [0, 0, 0, 0], frequencyByType: [0, 0, 0, 0] };
+        const report = { tail: [], byType: {}, total: 0, totalByType: [0, 0, 0, 0], frequencyByType: [] };
 
         await db.permaLog.each(log => {
             //console.info(log.time, log.msg);
@@ -239,12 +249,17 @@
             const rate4 = (report.byType[type] || { 4: { times: 0 } })[4].times / report.totalByType[index];
             const rate5 = (report.byType[type] || { 5: { times: 0 } })[5].times / report.totalByType[index];
             report.frequencyByType[type] =
-                rate.toLocaleString('de', {style: 'percent'})
-                + " III=" + rate3.toLocaleString('de', {style: 'percent'})
-                + " IV=" + rate4.toLocaleString('de', {style: 'percent'})
-                + " V=" + rate5.toLocaleString('de', {style: 'percent'})
+                formatPercent(rate)
+                + "   III=" + formatPercent(rate3)
+                + "   IV=" + formatPercent(rate4)
+                + "   V=" + formatPercent(rate5)
             ;
         });
+
+        function formatPercent(num) {
+            return num.toLocaleString('de', {style: 'percent', minimumFractionDigits: 2});
+
+        }
 
         function extractCraftingResult(msg) {
             // Crafting: crate=silver: reward=2/25
