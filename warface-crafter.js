@@ -5,6 +5,7 @@
 // @description  Automatically opens Warface crafting resource crates.
 // @author       Igor Mukhin
 // @match        https://wf.my.com/minigames/bpservices
+// @match        https://wf.mail.ru/minigames/bpservices
 // @require      https://code.jquery.com/jquery-3.3.1.min.js
 // @require      https://unpkg.com/dexie@2.0.4/dist/dexie.js
 // -require      file:///D:/igor.mukhin/projects-jetbrain/kiwi-automator/warface-crafter.js
@@ -36,9 +37,13 @@
     let db = null;
     let refreshAlreadySetUp = false;
 
+    let craftApiUrl = 'not_initialized';
+
     setTimeout(start, waitBeforeStartMillis);
 
     async function start() {
+        craftApiUrl = 'https://' + window.location.hostname + '/minigames/craft/api';
+
         // init db
         initDatabase();
 
@@ -79,7 +84,7 @@
         let mgTokenSet = true;
         async function renewMgToken() {
             if (!mgTokenSet) {
-                const user = await $.get('https://wf.my.com/minigames/craft/api/user-info');
+                const user = await $.get(craftApiUrl + '/user-info');
                 if (user.state === 'Success') {
                     const mgToken = user.data.token;
                     document.cookie = 'mg_token=' + mgToken + '; path=/';
@@ -92,7 +97,7 @@
 
         let domeSomething = false;
         try {
-            const data = await $.get('https://wf.my.com/minigames/craft/api/user-info');
+            const data = await $.get(craftApiUrl + '/user-info');
             if (data.state === 'Success') {
                 for (const chest of data.data.user_chests) {
                     if (chest.state === 'new' && autoCrafting.openCrates) {
@@ -100,7 +105,7 @@
                         if (autoCrafting.openCratesTypes == null
                                 || autoCrafting.openCratesTypes.indexOf(chest.type) !== -1) {
                             await renewMgToken();
-                            await $.post('https://wf.my.com/minigames/minigames/craft/api/start', { 'chest_id' : chest.id });
+                            await $.post(craftApiUrl + '/start', { 'chest_id' : chest.id });
                             domeSomething = true;
                             console.info('%cStarted crafting ' + chest.type + ' create',
                                 'color: lightblue; font-weight: bold');
@@ -109,7 +114,7 @@
 
                     } else if (chest.state === 'awaiting' && chest.ended_at < 0) {
                         await renewMgToken();
-                        let openResponse = await $.post('https://wf.my.com/minigames/craft/api/open',
+                        let openResponse = await $.post(craftApiUrl + '/open',
                             { 'chest_id' : chest.id, 'paid': 0 });
                         // {"state":"Success","data":{"resource":{"level":2,"amount":30}}}
                         if (openResponse.state === 'Success') {
