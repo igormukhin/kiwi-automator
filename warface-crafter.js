@@ -4,7 +4,7 @@
 // @version      0.2.0
 // @description  Automatically opens Warface crafting resource crates.
 // @author       Igor Mukhin
-// @match        https://wf.my.com/minigames/bpservices
+// @match        https://pc.warface.com/minigames/bpservices
 // @match        https://wf.mail.ru/minigames/bpservices
 // @require      https://code.jquery.com/jquery-3.3.1.min.js
 // @require      https://unpkg.com/dexie@2.0.4/dist/dexie.js
@@ -36,13 +36,16 @@
 
     let db = null;
     let refreshAlreadySetUp = false;
+    let refreshTimeoutHandle;
 
     let craftApiUrl = 'not_initialized';
+    let apiBaseUrl = 'not_initialized';
 
     setTimeout(start, waitBeforeStartMillis);
 
     async function start() {
-        craftApiUrl = 'https://' + window.location.hostname + '/minigames/craft/api';
+        apiBaseUrl = 'https://' + window.location.hostname + '/minigames';
+        craftApiUrl = apiBaseUrl + '/craft/api';
 
         // init db
         initDatabase();
@@ -158,7 +161,7 @@
         if (!refreshAlreadySetUp) {
             refreshAlreadySetUp = true;
 
-            setTimeout(function () {
+            refreshTimeoutHandle = setTimeout(function () {
                 window.location.reload(false);
             }, refreshDelayMillis);
 
@@ -211,6 +214,16 @@
             console.error('Error sending email', JSON.stringify(data));
         }
     }
+
+    // Cancel automatic refresh of the page.
+    // Useful if you want to study marketplace for longer than 10 minutes.
+    window.wf_pause = function () {
+        if (refreshAlreadySetUp) {
+            clearTimeout(refreshTimeoutHandle);
+        } else {
+            refreshAlreadySetUp = true;
+        }
+    };
 
     window.wf_testmail = async function () {
         return sendMail('test from email crafter', 'test email from <b>crafter</b>');
@@ -307,7 +320,7 @@
         return report;
     };
 
-    window.ka_crafting = function(platinumChance, slots, level5inPlatinumChance, daysToCraft, totalPlayers, winNumber) {
+    window.wf_crafting = function(platinumChance, slots, level5inPlatinumChance, daysToCraft, totalPlayers, winNumber) {
         platinumChance = platinumChance || (1/10);
         slots = slots || 8;
         level5inPlatinumChance = level5inPlatinumChance || (3/100);
@@ -352,5 +365,79 @@
             'Average wins:', (totalWins / totalPlayers));
     };
 
+    window.wf_sellables = async function() {
+        let overlay = $('<div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%;' +
+            ' background-color: white; opacity: 0.9; z-index: 10000;"> </div>');
+        overlay.appendTo(document.body);
+        overlay.click(() => overlay.remove());
+
+        let response = await $.get(apiBaseUrl + '/inventory/api/list');
+        if (response.state !== 'Success') throw 'Error fetching inventory';
+        const inventory = response.data.inventory;
+
+        response = await $.get(apiBaseUrl + '/marketplace/api/all');
+        if (response.state !== 'Success') throw 'Error fetching marketplace';
+        const marketplace = response.data;
+
+        response = await $.get(apiBaseUrl + '/marketplace/api/user-items');
+        if (response.state !== 'Success') throw 'Error fetching user offers';
+        const useroffers = response.data;
+
+        // collect item ids we are in inventory (saleable) and offered
+        const starredIds = {};
+        for (const item of inventory) {
+            if (item.game_item.sale) {
+                starredIds[item.item_id] = { item: item };
+            }
+        }
+        for (const myoffer of useroffers) {
+            if (starredIds[myoffer.entity_id]) {
+                starredIds[myoffer.entity_id].myoffer = myoffer;
+            } else {
+                starredIds[myoffer.entity_id] = { myoffer: myoffer };
+            }
+        }
+
+        function findItemInMarket(itemId) {
+            for (const offer of marketplace) {
+                if (itemId === offer.entity_id) {
+                    return offer;
+                }
+            }
+            return null;
+        }
+
+        const matches = [];
+        for (const starredId in starredIds) {
+            const item = starredIds[starredId].item;
+            const myoffer = starredIds[starredId].myoffer;
+            const offer = findItemInMarket(item ? item.item_id : myoffer.entity_id);
+            matches.push({ item: item, offer: offer, myoffer: myoffer });
+        }
+
+        matches.sort((a, b) => {
+            if (a.offer == null && b.offer != null) {
+                return -a.item.id;
+            } else if (b.offer == null && a.offer != null) {
+                return -b.item.id;
+            } else if (b.offer == null && a.offer == null) {
+                return b.item.id - a.item.id;
+            } else {
+                return b.offer.min_cost - a.offer.min_cost;
+            }
+        });
+
+        for (const pair of matches) {
+            const item = pair.item;
+            const offer = pair.offer;
+
+            if (offer == null) {
+                console.log(item.game_item.item.title, item.game_item.item.id + ':', 'No offers in MP', 'Max price: ', item.max_cost);
+                continue;
+            }
+
+            console.log(offer.item.title, offer.item.id + ':', 'Count ' + offer.count, 'Min price ' + offer.min_cost);
+        }
+    };
 
 })(console, window, document, localStorage, jQuery);

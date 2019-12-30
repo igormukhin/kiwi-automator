@@ -1,0 +1,219 @@
+Plan for wf_sellables
+========================================================
+- save daily the state of marketplace for starred items in the database
+- print the report on the webpage with thumbnails. Columns
+    - image, title, id
+    - # of offers, min price
+    - # of items user offered, the price
+    - # of items in inventory
+- print trends in the report
+    - price change after 1 day, 1 week
+    - # of offers change after 1 day, 1 week
+
+
+Images
+========================================================
+https://wf.cdn.gmru.net/static/wf.mail.ru/img/main/items/pt33_shop.png
+
+
+Inventory
+https://pc.warface.com/minigames/inventory/api/list
+========================================================
+
+{
+  "data": {
+    "inventory": [
+      {
+        "id": 26131291,
+        "item_id": 5217,
+        "count": 13,
+        "available_count": 13,
+        "blocked_count": 0,
+        "blocked_nearest_date": "2019-12-29 20:39:40",
+        "min_cost": 40,
+        "max_cost": 3000,
+        "game_item": {
+          "can_send_to_game": true,
+          "exchangeable": false,
+          "sale": false,
+          "item_type": {
+            "type": "weapon",
+            "class": "rifleman"
+          },
+          "item": {
+            "id": "ar33_shop",  // same as in marketplace
+            "count": 1,
+            "duration_type": "hour",
+            "duration": 3,
+            "title": "HCAR"
+          }
+        },
+        "possible": false,
+        "lootdog": false
+      },
+      {
+        "id": 30671935,
+        "item_id": 5625,
+        "count": 1,
+        "available_count": 0,
+        "blocked_count": 1,
+        "blocked_nearest_date": "2020-01-03 20:21:07",
+        "min_cost": 40,
+        "max_cost": 5000,
+        "game_item": {
+          "can_send_to_game": true,
+          "exchangeable": false,
+          "sale": false,  // saleable?
+          "item_type": {
+            "type": "weapon",
+            "class": "universal"
+          },
+          "item": {
+            "id": "pt33_shop",
+            "count": 1,
+            "duration_type": "hour",
+            "duration": 3,
+            "title": "S&W M&P R8"
+          }
+        },
+        "possible": false,
+        "lootdog": false
+      },
+      {
+        "id": 30671905,
+        "item_id": 5721,
+        "count": 1,
+        "available_count": 0,
+        "blocked_count": 1,
+        "blocked_nearest_date": "2020-01-03 20:20:27",
+        "min_cost": 40,
+        "max_cost": 5000,
+        "game_item": {
+          "can_send_to_game": true,
+          "exchangeable": false,
+          "sale": true,
+          "item_type": {
+            "type": "equipment",
+            "class": "sniper"
+          },
+          "item": {
+            "id": "sniper_helmet_blackwood_01",
+            "count": 1,
+            "permanent": 1,   // !!!!
+            "title": "Blackwood Sniper Helmet"
+          }
+        },
+        "possible": false,
+        "lootdog": false
+      },
+      
+
+Marketplace
+https://pc.warface.com/minigames/marketplace/api/all
+========================================================
+
+{
+  "data": [
+    {
+      "entity_id": 5247,
+      "count": 54,
+      "min_cost": 600,
+      "type": "inventory",
+      "title": "HCAR",
+      "item_id": "5247",
+      "class": "rifleman",
+      "kind": "weapon",
+      "item": {
+        "id": "ar33_shop",  // same as in inventory
+        "count": 1,
+        "permanent": 1,
+        "title": "HCAR"
+      }
+    },
+    {
+      "entity_id": 562,
+      "count": 1,
+      "min_cost": 200,
+      "type": "inventory",
+      "title": "Urban Skin",
+      "item_id": "562",
+      "class": "universal",
+      "kind": "camouflage",
+      "item": {
+        "id": "kn06_camo04_shop",
+        "count": 1,
+        "regular": 1,
+        "title": "Urban Skin"
+      }
+    },
+    {
+      "entity_id": 578,
+      "count": 1,
+      "min_cost": 200,
+      "type": "inventory",
+      "title": "Urban Skin",
+      "item_id": "578",
+      "class": "rifleman",
+      "kind": "camouflage",
+      "item": {
+        "id": "ar04_camo04skin_shop",
+        "count": 1,
+        "regular": 1,
+        "title": "Urban Skin"
+      }
+    },
+    {
+      "entity_id": 591,
+      "count": 5,
+      "min_cost": 200,
+      "type": "inventory",
+      "title": "Urban Skin",
+      "item_id": "591",
+      "class": "medic",
+      "kind": "camouflage",
+      "item": {
+        "id": "shg13_camo04_shop",
+        "count": 1,
+        "regular": 1,
+        "title": "Urban Skin"
+      }
+    },
+    {
+      "entity_id": 612,
+      "count": 4,
+      "min_cost": 189,
+      "type": "inventory",
+      "title": "Urban Skin",
+      "item_id": "612",
+      "class": "rifleman",
+      "kind": "camouflage",
+      "item": {
+        "id": "ar08_camo04_shop",
+        "count": 1,
+        "regular": 1,
+        "title": "Urban Skin"
+      }
+    },
+
+
+My offers
+https://pc.warface.com/minigames/marketplace/api/user-items
+========================================================
+
+{
+  "data": [
+    {
+      "inventory_id": 26766927,
+      "entity_id": 5247,
+      "type": "inventory",
+      "cost": 1200,
+      "item": {
+        "id": "ar33_shop",
+        "count": 1,
+        "permanent": 1
+      },
+      "kind": "weapon",
+      "class": "rifleman",
+      "title": "HCAR",
+      "expires_at": 0
+    }

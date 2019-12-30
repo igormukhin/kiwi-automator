@@ -1,0 +1,198 @@
+https://wf.mail.ru/minigames/user/info
+===============
+
+{
+  "state": "Success",
+  "data": {
+    "state": "auth",
+    "user_id": 666612288,
+    "email": "iimuhin@mail.ru",
+    "token": "963ffde0641c78b241ecab12f22c60dac2a5a26b",
+    "project": "wf",
+    "territory": "mailru"
+  }
+}
+
+
+
+https://wf.mail.ru/minigames/bp5/user/info
+===============
+
+{
+  "data": {
+    "csaid": 666612288,
+    "status": "member",
+    "level": 5,
+    "exp": 615,
+    "prev_exp": 600,
+    "next_exp": 750,
+    "points": 19,
+    "username": "NaganKiller",
+    "accesses": [
+      "book",
+      "mars"
+    ],
+    "choose_level_rewards": [],
+    "progress": 9,
+    "personal_boxes": 0,
+    "colony_resources": 0,
+    "base_level": 1,
+    "base_mission": null
+  },
+  "state": "Success"
+}
+
+
+
+https://wf.mail.ru/minigames/bp5/daily/user-task
+===================
+
+{
+  "data": {
+    "event_id": 1483,
+    "progress": 0,
+    "is_complete": false,
+    "started_at": "2019-06-12 19:41:29",
+    "target_count": 2,
+    "is_one_game": false,
+    "exp": 20,
+    "title": "",
+    "descr": "Выиграть 2 матча в режиме \"Захват\", играя любым классом"
+  },
+  "state": "Success"
+}
+
+
+
+"База"
+https://wf.mail.ru/minigames/bp6/colony/upgrades
+===================
+
+{
+  "data": {
+    "level": 1,
+    "energy": {
+      "energy": 100,
+      "energy_limit": 100
+    },
+    "next_level": {
+      "level": 2,
+      "user_level": 10,
+      "battle_points": 20,
+      "resources": 0
+    }
+  },
+  "state": "Success"
+}
+
+
+"Исследовать"
+https://wf.mail.ru/minigames/bp6/research/list
+===================
+
+{
+  "data": [
+    {
+      "id": 1,
+      "description": "Short mission base",
+      "duration": 1200,
+      "rewards_count": 1,
+      "type": "short",
+      "requirements": {
+        "colony_level": 1,
+        "energy": 20,
+        "complete_now_amount": 5
+      },
+      "rewards": [
+        {
+          "type": "currency",
+          "value": {
+            "id": 2,
+            "count": 8
+          }
+        },
+        {
+          "type": "currency",
+          "value": {
+            "id": 2,
+            "count": 10
+          }
+        },
+        {
+          "type": "currency",
+          "value": {
+            "id": 2,
+            "count": 15
+          }
+        },
+        {
+          "type": "currency",
+          "value": {
+            "id": 2,
+            "count": 25
+          }
+        },
+        {
+          "type": "experience",
+          "value": {
+            "count": 3
+          }
+        },
+        {
+          "type": "experience",
+          "value": {
+            "count": 4
+          }
+        },
+        {
+          "type": "experience",
+          "value": {
+            "count": 5
+          }
+        },
+        {
+          "type": "experience",
+          "value": {
+            "count": 8
+          }
+        },
+        {
+          "type": "experience",
+          "value": {
+            "count": 10
+          }
+        }
+      ],
+      "user_research": null
+    }
+  ],
+  "state": "Success"
+}
+
+
+
+"Начать короткое"
+POST https://wf.mail.ru/minigames/bp6/research/start
+research_id=1
+========================
+{"data":null,"state":"Success"}
+
+
+
+
+POST https://wf.mail.ru/minigames/bp6/research/take-rewards
+research_id=1
+========================
+{
+  "data": [
+    {
+      "reward": {
+        "type": "experience",
+        "count": 8
+      },
+      "title": "{\"en\":\"Experience\",\"ru\":\"Опыт\"}"
+    }
+  ],
+  "state": "Success"
+}
+
