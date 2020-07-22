@@ -20,6 +20,8 @@
 (function(console, window, document, $, localStorage) {
     'use strict';
 
+    const autoRunOperations = true;
+
     const waitBeforeStartMillis = 100;
 
     let db = null;
@@ -117,6 +119,10 @@
     }
 
     async function handleResearch() {
+        if (!autoRunOperations) {
+            return;
+        }
+
         let operation = getBestResearch();
         console.log(operation, research.energy);
         if (operation.user_research) {
