@@ -16,7 +16,7 @@
 (function(console, window, document, $, localStorage) {
     'use strict';
 
-    const waitBeforeStartMillis = 100;
+    const waitBeforeStartMillis = 200;
     const PAGE_RELOAD_TIMEOUT = 1000 * 60 * 10;
 
     let db = null;
@@ -35,10 +35,11 @@
         // start operations
         try {
             // wait for some element of the page to appear
-            await waitUntil(0, 100, 50, () => $('.bp-page__tabs').length > 0);
+            await waitUntil(0, 200, 50, () => $('.bp-page__tabs').length > 0);
             console.log('Battlepass page detected, continuing...');
 
             await fetchState();
+            await displayWins();
             await handleWinCrates();
 
             setTimeout(() => reloadPage(), PAGE_RELOAD_TIMEOUT);
@@ -57,7 +58,7 @@
     }
 
     async function persistResult(data) {
-        const record = jQuery.extend({ time: new Date() }, data);
+        const record = $.extend({ time: new Date() }, data);
         await db.results.put(record);
     }
 
@@ -68,6 +69,10 @@
         let response = await $.get(apiBaseUrl + '/battlepass/wallets');
         if (response.state !== 'Success') throw 'Error fetching wallets';
         wallets = response.data;
+    }
+
+    async function displayWins() {
+        $('.header__wallets__label').text('Wins: ' + wallets.victory);
     }
 
     async function handleWinCrates() {
